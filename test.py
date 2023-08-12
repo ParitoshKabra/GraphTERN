@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 parser = argparse.ArgumentParser()
 parser.add_argument('--tag', default='tag', help='Personal tag for the model')
 parser.add_argument('--n_samples', type=int, default=20, help='Number of samples')
+parser.add_argument('--epoch_eval', type=int, default=27, help='Which epoch to test the model on')
 test_args = parser.parse_args()
 
 # Get arguments for training
@@ -22,7 +23,8 @@ with open(args_path, 'rb') as f:
     args = pickle.load(f)
 
 dataset_path = './datasets/' + args.dataset + '/'
-model_path = checkpoint_dir + args.dataset + '_best.pth'
+model_path = checkpoint_dir + args.dataset + f'_best{test_args.epoch_eval}.pth'
+KSTEPS = test_args.n_samples
 
 # Data preparation
 test_dataset = TrajectoryDataset(dataset_path + 'test/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
@@ -48,7 +50,7 @@ def test(KSTEPS=20):
         S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
 
         # Run Graph-TERN model
-        V_init, V_pred, V_refi, valid_mask = model(S_obs, pruning=4, clustering=True)
+        V_init, V_pred, V_refi, valid_mask = model(S_obs, pruning=4)
 
         # Calculate ADEs and FDEs for each refined trajectory
         V_trgt_abs = S_trgt[:, 0].squeeze(dim=0)
@@ -73,7 +75,7 @@ def main():
     # Repeat the evaluation to reduce randomness
     repeat = 10
     for i in range(repeat):
-        temp = test(KSTEPS=test_args.n_samples)
+        temp = test(KSTEPS=20)
         ade_refi.append(temp[0])
         fde_refi.append(temp[1])
 

@@ -25,26 +25,38 @@ parser = argparse.ArgumentParser()
 # Model specific parameters
 parser.add_argument('--input_size', type=int, default=2)
 parser.add_argument('--output_size', type=int, default=5)
-parser.add_argument('--n_epgcn', type=int, default=1, help='Number of EPGCN layers for endpoint prediction')
-parser.add_argument('--n_epcnn', type=int, default=6, help='Number of EPCNN layers for endpoint prediction')
-parser.add_argument('--n_trgcn', type=int, default=1, help='Number of TRGCN layers for trajectory refinement')
-parser.add_argument('--n_trcnn', type=int, default=3, help='Number of TRCNN layers for trajectory refinement')
-parser.add_argument('--n_ways', type=int, default=3, help='Number of control points for endpoint prediction')
-parser.add_argument('--n_smpl', type=int, default=20, help='Number of samples for refine')
+parser.add_argument('--n_epgcn', type=int, default=1,
+                    help='Number of EPGCN layers for endpoint prediction')
+parser.add_argument('--n_epcnn', type=int, default=6,
+                    help='Number of EPCNN layers for endpoint prediction')
+parser.add_argument('--n_trgcn', type=int, default=1,
+                    help='Number of TRGCN layers for trajectory refinement')
+parser.add_argument('--n_trcnn', type=int, default=3,
+                    help='Number of TRCNN layers for trajectory refinement')
+parser.add_argument('--n_ways', type=int, default=3,
+                    help='Number of control points for endpoint prediction')
+parser.add_argument('--n_smpl', type=int, default=20,
+                    help='Number of samples for refine')
 parser.add_argument('--kernel_size', type=int, default=3)
 
 # Data specifc paremeters
 parser.add_argument('--obs_seq_len', type=int, default=8)
 parser.add_argument('--pred_seq_len', type=int, default=12)
-parser.add_argument('--dataset', default='zara1', help='Dataset name(eth,hotel,univ,zara1,zara2)')
+parser.add_argument('--dataset', default='zara1',
+                    help='Dataset name(eth,hotel,univ,zara1,zara2)')
 
 # Training specifc parameters
-parser.add_argument('--batch_size', type=int, default=128, help='Mini batch size')
-parser.add_argument('--num_epochs', type=int, default=512, help='Number of epochs')
-parser.add_argument('--clip_grad', type=float, default=None, help='Gradient clipping')
+parser.add_argument('--batch_size', type=int,
+                    default=128, help='Mini batch size')
+parser.add_argument('--num_epochs', type=int,
+                    default=512, help='Number of epochs')
+parser.add_argument('--clip_grad', type=float,
+                    default=None, help='Gradient clipping')
 parser.add_argument('--lr', type=float, default=0.0001, help='Learning rate')
-parser.add_argument('--lr_sh_rate', type=int, default=128, help='Number of steps to drop the lr')
-parser.add_argument('--use_lrschd', action="store_true", default=False, help='Use lr rate scheduler')
+parser.add_argument('--lr_sh_rate', type=int, default=128,
+                    help='Number of steps to drop the lr')
+parser.add_argument('--use_lrschd', action="store_true",
+                    default=False, help='Use lr rate scheduler')
 parser.add_argument('--tag', default='tag', help='Personal tag for the model')
 
 args = parser.parse_args()
@@ -55,11 +67,15 @@ args = parser.parse_args()
 dataset_path = './datasets/' + args.dataset + '/'
 checkpoint_dir = './checkpoint/' + args.tag + '/'
 
-train_dataset = TrajectoryDataset(dataset_path + 'train/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
-train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True, num_workers=0, pin_memory=True)
+train_dataset = TrajectoryDataset(
+    dataset_path + 'train/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
+train_loader = DataLoader(train_dataset, batch_size=1,
+                          shuffle=True, num_workers=0, pin_memory=True)
 
-val_dataset = TrajectoryDataset(dataset_path + 'val/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
-val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
+val_dataset = TrajectoryDataset(
+    dataset_path + 'val/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
+val_loader = DataLoader(val_dataset, batch_size=1,
+                        shuffle=False, num_workers=0, pin_memory=True)
 
 # Model preparation
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
@@ -68,7 +84,8 @@ model = model.cuda()
 
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
 if args.use_lrschd:
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_sh_rate, gamma=0.8)
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer, step_size=args.lr_sh_rate, gamma=0.8)
 
 # Train logging
 if not os.path.exists(checkpoint_dir):
@@ -88,7 +105,8 @@ def train(epoch):
     loader_len = len(train_loader)
 
     progressbar = tqdm(range(loader_len))
-    progressbar.set_description('Train Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
+    progressbar.set_description(
+        'Train Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
     optimizer.zero_grad()
     for batch_idx, batch in enumerate(train_loader):
         # sum gradients till idx reach to batch_size
@@ -121,13 +139,15 @@ def train(epoch):
 
         if batch_idx % args.batch_size + 1 == args.batch_size or batch_idx + 1 == loader_len:
             if args.clip_grad is not None:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_grad)
+                torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), args.clip_grad)
             optimizer.step()
 
             r_loss_batch = 0.
             m_loss_batch = 0.
 
-        progressbar.set_description('Train Epoch: {0} Loss: {1:.8f}'.format(epoch, loss.item() / args.batch_size))
+        progressbar.set_description('Train Epoch: {0} Loss: {1:.8f}'.format(
+            epoch, loss.item() / args.batch_size))
         progressbar.update(1)
 
     progressbar.close()
@@ -142,7 +162,8 @@ def valid(epoch):
     loader_len = len(val_loader)
 
     progressbar = tqdm(range(loader_len))
-    progressbar.set_description('Valid Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
+    progressbar.set_description(
+        'Valid Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
 
     for batch_idx, batch in enumerate(val_loader):
         S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
@@ -163,7 +184,8 @@ def valid(epoch):
             r_loss_batch = 0.
             m_loss_batch = 0.
 
-        progressbar.set_description('Valid Epoch: {0} Loss: {1:.8f}'.format(epoch, loss.item() / args.batch_size))
+        progressbar.set_description('Valid Epoch: {0} Loss: {1:.8f}'.format(
+            epoch, loss.item() / args.batch_size))
         progressbar.update(1)
 
     progressbar.close()
@@ -173,7 +195,8 @@ def valid(epoch):
     if metrics['val_loss'][-1] < constant_metrics['min_val_loss']:
         constant_metrics['min_val_loss'] = metrics['val_loss'][-1]
         constant_metrics['min_val_epoch'] = epoch
-        torch.save(model.state_dict(), checkpoint_dir + args.dataset + '_best.pth')
+        torch.save(model.state_dict(), checkpoint_dir +
+                   args.dataset + f'_best{epoch}.pth')
 
 
 def main():
@@ -186,14 +209,16 @@ def main():
 
         print(" ")
         print("Dataset: {0}, Epoch: {1}".format(args.tag, epoch))
-        print("Train_loss: {0}, Val_los: {1}".format(metrics['train_loss'][-1], metrics['val_loss'][-1]))
-        print("Min_val_epoch: {0}, Min_val_loss: {1}".format(constant_metrics['min_val_epoch'], constant_metrics['min_val_loss']))
+        print("Train_loss: {0}, Val_los: {1}".format(
+            metrics['train_loss'][-1], metrics['val_loss'][-1]))
+        print("Min_val_epoch: {0}, Min_val_loss: {1}".format(
+            constant_metrics['min_val_epoch'], constant_metrics['min_val_loss']))
         print(" ")
 
-        with open(checkpoint_dir + 'metrics.pkl', 'wb') as f:
+        with open(checkpoint_dir + f'metrics{epoch}.pkl', 'wb') as f:
             pickle.dump(metrics, f)
 
-        with open(checkpoint_dir + 'constant_metrics.pkl', 'wb') as f:
+        with open(checkpoint_dir + f'constant_metrics{epoch}.pkl', 'wb') as f:
             pickle.dump(constant_metrics, f)
 
 

@@ -44,26 +44,35 @@ class graph_tern(nn.Module):
 
         # Control Point Prediction
         self.tp_mrgcns = nn.ModuleList()
-        self.tp_mrgcns.append(st_mrgcn(in_channels=input_feat, out_channels=hidden_feat, kernel_size=(kernel_size, seq_len), relation=4))
+        self.tp_mrgcns.append(st_mrgcn(in_channels=input_feat, out_channels=hidden_feat, kernel_size=(
+            kernel_size, seq_len), relation=4))
         for j in range(1, self.n_epgcn):
-            self.tp_mrgcns.append(st_mrgcn(in_channels=hidden_feat, out_channels=hidden_feat, kernel_size=(kernel_size, seq_len), relation=4))
+            self.tp_mrgcns.append(st_mrgcn(in_channels=hidden_feat, out_channels=hidden_feat, kernel_size=(
+                kernel_size, seq_len), relation=4))
 
         self.tpcnns = nn.ModuleList()
-        self.tpcnns.append(epcnn(obs_seq_len=seq_len, pred_seq_len=self.n_gmms, in_channels=hidden_feat, out_channels=hidden_feat))
+        self.tpcnns.append(epcnn(obs_seq_len=seq_len, pred_seq_len=self.n_gmms,
+                           in_channels=hidden_feat, out_channels=hidden_feat))
         for j in range(1, self.n_epcnn - 1):
-            self.tpcnns.append(epcnn(obs_seq_len=self.n_gmms, pred_seq_len=self.n_gmms, in_channels=hidden_feat, out_channels=hidden_feat))
-        self.tpcnns.append(epcnn(obs_seq_len=self.n_gmms, pred_seq_len=self.n_gmms, in_channels=hidden_feat, out_channels=output_feat * self.n_ways))
+            self.tpcnns.append(epcnn(obs_seq_len=self.n_gmms, pred_seq_len=self.n_gmms,
+                               in_channels=hidden_feat, out_channels=hidden_feat))
+        self.tpcnns.append(epcnn(obs_seq_len=self.n_gmms, pred_seq_len=self.n_gmms,
+                           in_channels=hidden_feat, out_channels=output_feat * self.n_ways))
 
         # Trajectory Refinement
         self.st_mrgcns = nn.ModuleList()
-        self.st_mrgcns.append(st_mrgcn(in_channels=input_feat, out_channels=hidden_feat, kernel_size=(kernel_size, total_seq_len), relation=4))
+        self.st_mrgcns.append(st_mrgcn(in_channels=input_feat, out_channels=hidden_feat, kernel_size=(
+            kernel_size, total_seq_len), relation=4))
         for j in range(1, self.n_trgcn):
-            self.st_mrgcns.append(st_mrgcn(in_channels=hidden_feat, out_channels=hidden_feat, kernel_size=(kernel_size, total_seq_len), relation=4))
+            self.st_mrgcns.append(st_mrgcn(in_channels=hidden_feat, out_channels=hidden_feat, kernel_size=(
+                kernel_size, total_seq_len), relation=4))
 
         self.trcnns = nn.ModuleList()
         for j in range(0, self.n_trcnn-1):
-            self.trcnns.append(trcnn(total_seq_len=total_seq_len, pred_seq_len=total_seq_len, in_channels=hidden_feat, out_channels=hidden_feat, t_ksize=(n_trcnn-j)*2+1))
-        self.trcnns.append(trcnn(total_seq_len=total_seq_len, pred_seq_len=pred_seq_len, in_channels=hidden_feat, out_channels=input_feat))
+            self.trcnns.append(trcnn(total_seq_len=total_seq_len, pred_seq_len=total_seq_len,
+                               in_channels=hidden_feat, out_channels=hidden_feat, t_ksize=(n_trcnn-j)*2+1))
+        self.trcnns.append(trcnn(total_seq_len=total_seq_len, pred_seq_len=pred_seq_len,
+                           in_channels=hidden_feat, out_channels=input_feat))
 
     def forward(self, S_obs, S_trgt=None, pruning=None, clustering=False):
 
@@ -99,8 +108,10 @@ class graph_tern(nn.Module):
         ##################################################
 
         # Guided point sampling
-        Gamma = V_obs_rel.mean(dim=1).norm(p=2, dim=-1).squeeze(dim=0) / self.gamma
-        Gamma /= self.pred_seq_len  # code optimization for linear interpolation (pre-division)
+        Gamma = V_obs_rel.mean(dim=1).norm(
+            p=2, dim=-1).squeeze(dim=0) / self.gamma
+        # code optimization for linear interpolation (pre-division)
+        Gamma /= self.pred_seq_len
 
         if S_trgt is not None:
             # Training phase
@@ -115,21 +126,28 @@ class graph_tern(nn.Module):
             for i in range(self.n_ways):
                 # NMVC -> NVMC
                 temp = V_init_list[i].transpose(1, 2).contiguous()
-                mix = Categorical(torch.nn.functional.softmax(temp[:, :, :, 4], dim=-1))
-                comp = Independent(Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
+                mix = Categorical(torch.nn.functional.softmax(
+                    temp[:, :, :, 4], dim=-1))
+                comp = Independent(
+                    Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
                 gmm = MixtureSameFamily(mix, comp)
-                dest_s_list.append(gmm.sample((self.n_smpl,)).squeeze(dim=1))  # NVC
+                dest_s_list.append(gmm.sample(
+                    (self.n_smpl,)).squeeze(dim=1))  # NVC
             dest_s_list = torch.stack(dest_s_list, dim=3)
             dest_s = dest_s_list.mean(dim=3)
-            valid_mask_s = (dest_s - V_dest_rel).norm(p=2, dim=-1).le(Gamma).type(torch.float)
+            valid_mask_s = (dest_s - V_dest_rel).norm(p=2,
+                                                      dim=-1).le(Gamma).type(torch.float)
 
             # Guided endpoint sampling
-            eps_r = torch.rand(self.n_smpl, V_dest_rel.size(1), device='cuda') * Gamma  # NV
-            eps_t = torch.rand(self.n_smpl, V_dest_rel.size(1), device='cuda')  # NV
+            eps_r = torch.rand(self.n_smpl, V_dest_rel.size(
+                1), device='cuda') * Gamma  # NV
+            eps_t = torch.rand(
+                self.n_smpl, V_dest_rel.size(1), device='cuda')  # NV
             eps_x = eps_r * eps_t.cos()
             eps_y = eps_r * eps_t.sin()
             dest_g = V_dest_rel + torch.stack([eps_x, eps_y], dim=-1)
-            valid_mask_g = torch.ones(self.n_smpl, V_dest_rel.size(1), device='cuda')
+            valid_mask_g = torch.ones(
+                self.n_smpl, V_dest_rel.size(1), device='cuda')
 
             # Concatenate all samples
             endpoint_set = torch.cat([dest_s, dest_g], dim=0)
@@ -143,10 +161,13 @@ class graph_tern(nn.Module):
             for i in range(self.n_ways):
                 # NMVC -> NVMC
                 temp = V_init_list[i].transpose(1, 2).contiguous()
-                mix = Categorical(torch.nn.functional.softmax(temp[:, :, :, 4], dim=-1))
-                comp = Independent(Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
+                mix = Categorical(torch.nn.functional.softmax(
+                    temp[:, :, :, 4], dim=-1))
+                comp = Independent(
+                    Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
                 gmm = MixtureSameFamily(mix, comp)
-                dest_s_list.append(gmm.sample((self.n_smpl,)).squeeze(dim=1))  # NVC
+                dest_s_list.append(gmm.sample(
+                    (self.n_smpl,)).squeeze(dim=1))  # NVC
 
             dest_s_list = torch.stack(dest_s_list, dim=3)
             endpoint_set = dest_s_list.mean(dim=3)
@@ -181,32 +202,43 @@ class graph_tern(nn.Module):
             # NMV(C*K) (C: [mu_x, mu_y, std_x, std_y, pi])
             endpoint_set_prune = []
             for _ in range(self.n_smpl):
-                V_init_list = V_init.chunk(chunks=self.n_ways, dim=-1)  # (NMVC)*K
+                V_init_list = V_init.chunk(
+                    chunks=self.n_ways, dim=-1)  # (NMVC)*K
                 dest_s_list = []
                 for i in range(self.n_ways):
                     # NMVC -> NVMC
                     temp = V_init_list[i].transpose(1, 2).contiguous()
                     mix_temp = temp[:, :, :, 4]
-                    sort_index = torch.argsort(mix_temp.squeeze(dim=0), dim=-1).detach().cpu().numpy()
-                    mix_temp[:, torch.arange(V_init.size(2)).unsqueeze(dim=1), sort_index[:, :pruning]] = -1e8
-                    mix = Categorical(torch.nn.functional.softmax(mix_temp, dim=-1))
-                    comp = Independent(Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
+                    sort_index = torch.argsort(mix_temp.squeeze(
+                        dim=0), dim=-1).detach().cpu().numpy()
+                    mix_temp[:, torch.arange(V_init.size(2)).unsqueeze(
+                        dim=1), sort_index[:, :pruning]] = -1e8
+                    mix = Categorical(
+                        torch.nn.functional.softmax(mix_temp, dim=-1))
+                    comp = Independent(
+                        Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
                     gmm = MixtureSameFamily(mix, comp)
-                    dest_s_list.append(gmm.sample((self.n_smpl,)).squeeze(dim=1))  # NVC
+                    dest_s_list.append(gmm.sample(
+                        (self.n_smpl,)).squeeze(dim=1))  # NVC
 
                 dest_s_list = torch.stack(dest_s_list, dim=3)
                 endpoint_set_prune.append(dest_s_list.mean(dim=3))
 
             endpoint_set_prune = torch.stack(endpoint_set_prune, dim=0)
-            argmax_index = (endpoint_set_prune.unsqueeze(dim=2) - endpoint_set_prune.unsqueeze(dim=1))
-            argmax_index = argmax_index.norm(p=2, dim=-1).kthvalue(k=2, dim=2)[0].sum(dim=1).argmax(dim=0)
-            endpoint_set = endpoint_set_prune[argmax_index, :, torch.arange(V_init.size(2))].transpose(0, 1)
+            argmax_index = (endpoint_set_prune.unsqueeze(
+                dim=2) - endpoint_set_prune.unsqueeze(dim=1))
+            argmax_index = argmax_index.norm(
+                p=2, dim=-1).kthvalue(k=2, dim=2)[0].sum(dim=1).argmax(dim=0)
+            endpoint_set = endpoint_set_prune[argmax_index, :, torch.arange(
+                V_init.size(2))].transpose(0, 1)
             valid_mask = torch.ones(self.n_smpl, Gamma.size(0), device='cuda')
 
         # Initial trajectory prediction
         # Linear interpolation NVC -> NTVC
-        V_pred = endpoint_set.unsqueeze(dim=1).repeat_interleave(repeats=self.pred_seq_len, dim=1)
-        V_pred_abs = (V_pred.cumsum(dim=1) + V_obs_abs.squeeze(dim=0)[-1, :, :]).detach().clone()
+        V_pred = endpoint_set.unsqueeze(dim=1).repeat_interleave(
+            repeats=self.pred_seq_len, dim=1)
+        V_pred_abs = (V_pred.cumsum(dim=1) +
+                      V_obs_abs.squeeze(dim=0)[-1, :, :]).detach().clone()
 
         # repeat to sampled times (batch size)
         V_obs_rept = V_obs_rel.repeat_interleave(V_pred.size(0), dim=0)
@@ -214,7 +246,8 @@ class graph_tern(nn.Module):
 
         # Graph Trajectory Refinement
         # make adjacency matrix for predicted 12 frames (will be iteratively change)
-        A_pred = generate_adjacency_matrix(torch.stack([V_pred_abs, V_pred], dim=1))
+        A_pred = generate_adjacency_matrix(
+            torch.stack([V_pred_abs, V_pred], dim=1))
 
         # concatenate to make full 20 frame sequences
         V = torch.cat([V_obs_rept, V_pred], dim=1).detach()
