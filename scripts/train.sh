@@ -2,8 +2,10 @@
 echo "Start training task queues"
 
 # Hyperparameters
-dataset_array=("eth" "hotel" "univ" "zara1" "zara2")
-device_id_array=(0 1 2 3 4)
+# name_array=("eth" "hotel" "univ" "zara1" "zara2")
+name_array=("eth")
+device_id_array=(0)
+# device_id_array=(0 1 2 3 4)
 prefix="graph-tern_"
 suffix="_experiment"
 
@@ -33,7 +35,7 @@ PID_array=()
 sighdl ()
 {
   echo "Kill training processes"
-  for (( i=0; i<${#dataset_array[@]}; i++ ))
+  for (( i=0; i<${#name_array[@]}; i++ ))
   do
     kill ${PID_array[$i]}
   done
@@ -44,16 +46,16 @@ sighdl ()
 trap sighdl SIGINT SIGTERM
 
 # Start training tasks
-for (( i=0; i<${#dataset_array[@]}; i++ ))
+for (( i=0; i<${#name_array[@]}; i++ ))
 do
-  printf "Training ${dataset_array[$i]}"
+  printf "Training ${name_array[$i]}"
   CUDA_VISIBLE_DEVICES=${device_id_array[$i]} python3 train.py \
-  --dataset "${dataset_array[$i]}" --tag "${prefix}""${dataset_array[$i]}""${suffix}" &
+  --dataset "${name_array[$i]}" --tag "${prefix}""${name_array[$i]}""${suffix}" &
   PID_array[$i]=$!
   printf " job ${#PID_array[@]} pid ${PID_array[$i]}\n"
 done
 
-for (( i=0; i<${#dataset_array[@]}; i++ ))
+for (( i=0; i<${#name_array[@]}; i++ ))
 do
   wait ${PID_array[$i]}
 done
