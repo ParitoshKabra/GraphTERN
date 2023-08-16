@@ -43,6 +43,7 @@ def read_file(_path, delim='\t'):
 
 class TrajectoryDataset(Dataset):
     """Dataloder for the Trajectory datasets"""
+
     def __init__(self, data_dir, obs_len=8, pred_len=8, skip=1, threshold=0.002, min_ped=1, delim='\t'):
         """
         Args:
@@ -74,27 +75,34 @@ class TrajectoryDataset(Dataset):
         loss_mask_list = []
         non_linear_ped = []
         for path in all_files:
+            print(path)
             data = read_file(path, delim)
             frames = np.unique(data[:, 0]).tolist()
             frame_data = []
             for frame in frames:
                 frame_data.append(data[frame == data[:, 0], :])
-            num_sequences = int(math.ceil((len(frames) - self.seq_len + 1) / skip))
+            num_sequences = int(
+                math.ceil((len(frames) - self.seq_len + 1) / skip))
 
             for idx in range(0, num_sequences * self.skip + 1, skip):
-                curr_seq_data = np.concatenate(frame_data[idx:idx + self.seq_len], axis=0)
+                curr_seq_data = np.concatenate(
+                    frame_data[idx:idx + self.seq_len], axis=0)
                 peds_in_curr_seq = np.unique(curr_seq_data[:, 1])
-                self.max_peds_in_frame = max(self.max_peds_in_frame, len(peds_in_curr_seq))
+                self.max_peds_in_frame = max(
+                    self.max_peds_in_frame, len(peds_in_curr_seq))
 
                 curr_seq = np.zeros((len(peds_in_curr_seq), 2, self.seq_len))
-                curr_seq_rel = np.zeros((len(peds_in_curr_seq), 2, self.seq_len))
+                curr_seq_rel = np.zeros(
+                    (len(peds_in_curr_seq), 2, self.seq_len))
 
-                curr_loss_mask = np.zeros((len(peds_in_curr_seq), self.seq_len))
+                curr_loss_mask = np.zeros(
+                    (len(peds_in_curr_seq), self.seq_len))
 
                 num_peds_considered = 0
                 _non_linear_ped = []
                 for _, ped_id in enumerate(peds_in_curr_seq):
-                    curr_ped_seq = curr_seq_data[curr_seq_data[:, 1] == ped_id, :]
+                    curr_ped_seq = curr_seq_data[curr_seq_data[:, 1]
+                                                 == ped_id, :]
                     curr_ped_seq = np.around(curr_ped_seq, decimals=4)
                     pad_front = frames.index(curr_ped_seq[0, 0]) - idx
                     pad_end = frames.index(curr_ped_seq[-1, 0]) - idx + 1
@@ -104,14 +112,16 @@ class TrajectoryDataset(Dataset):
                     # curr_ped_seq = curr_ped_seq
                     # Make coordinates relative
                     rel_curr_ped_seq = np.zeros(curr_ped_seq.shape)
-                    rel_curr_ped_seq[:, 1:] = curr_ped_seq[:, 1:] - curr_ped_seq[:, :-1]
+                    rel_curr_ped_seq[:, 1:] = curr_ped_seq[:,
+                                                           1:] - curr_ped_seq[:, :-1]
                     _idx = num_peds_considered
 
                     curr_seq[_idx, :, pad_front:pad_end] = curr_ped_seq
                     curr_seq_rel[_idx, :, pad_front:pad_end] = rel_curr_ped_seq
 
                     # Linear vs Non-Linear Trajectory
-                    _non_linear_ped.append(poly_fit(curr_ped_seq, pred_len, threshold))
+                    _non_linear_ped.append(
+                        poly_fit(curr_ped_seq, pred_len, threshold))
                     curr_loss_mask[_idx, pad_front:pad_end] = 1
                     num_peds_considered += 1
 
@@ -125,31 +135,42 @@ class TrajectoryDataset(Dataset):
         self.num_seq = len(seq_list)
         seq_list = np.concatenate(seq_list, axis=0)
         seq_list_rel = np.concatenate(seq_list_rel, axis=0)
+        print(seq_list)
+        print(seq_list_rel)
         loss_mask_list = np.concatenate(loss_mask_list, axis=0)
         non_linear_ped = np.asarray(non_linear_ped)
 
         # Convert numpy -> Torch Tensor
-        self.obs_traj = torch.from_numpy(seq_list[:, :, :self.obs_len]).type(torch.float)
-        self.pred_traj = torch.from_numpy(seq_list[:, :, self.obs_len:]).type(torch.float)
-        self.obs_traj_rel = torch.from_numpy(seq_list_rel[:, :, :self.obs_len]).type(torch.float)
-        self.pred_traj_rel = torch.from_numpy(seq_list_rel[:, :, self.obs_len:]).type(torch.float)
+        self.obs_traj = torch.from_numpy(
+            seq_list[:, :, :self.obs_len]).type(torch.float)
+        self.pred_traj = torch.from_numpy(
+            seq_list[:, :, self.obs_len:]).type(torch.float)
+        self.obs_traj_rel = torch.from_numpy(
+            seq_list_rel[:, :, :self.obs_len]).type(torch.float)
+        self.pred_traj_rel = torch.from_numpy(
+            seq_list_rel[:, :, self.obs_len:]).type(torch.float)
         self.loss_mask = torch.from_numpy(loss_mask_list).type(torch.float)
-        self.non_linear_ped = torch.from_numpy(non_linear_ped).type(torch.float)
+        self.non_linear_ped = torch.from_numpy(
+            non_linear_ped).type(torch.float)
         cum_start_idx = [0] + np.cumsum(num_peds_in_seq).tolist()
-        self.seq_start_end = [(start, end) for start, end in zip(cum_start_idx, cum_start_idx[1:])]
+        self.seq_start_end = [(start, end) for start, end in zip(
+            cum_start_idx, cum_start_idx[1:])]
 
         # Convert Trajectories to Graphs
         self.S_obs = []
         self.S_trgt = []
 
         pbar = tqdm(total=len(self.seq_start_end))
-        pbar.set_description('Processing {0} dataset {1}'.format(self.data_dir.split('/')[-3], self.data_dir.split('/')[-2]))
+        pbar.set_description('Processing {0} dataset {1}'.format(
+            self.data_dir.split('/')[-3], self.data_dir.split('/')[-2]))
 
         for i in range(len(self.seq_start_end)):
             start, end = self.seq_start_end[i]
-            s_obs = torch.stack([self.obs_traj[start:end, :], self.obs_traj_rel[start:end, :]], dim=0).permute(0, 3, 1, 2)
+            s_obs = torch.stack(
+                [self.obs_traj[start:end, :], self.obs_traj_rel[start:end, :]], dim=0).permute(0, 3, 1, 2)
             self.S_obs.append(s_obs.clone())
-            s_trgt = torch.stack([self.pred_traj[start:end, :], self.pred_traj_rel[start:end, :]], dim=0).permute(0, 3, 1, 2)
+            s_trgt = torch.stack(
+                [self.pred_traj[start:end, :], self.pred_traj_rel[start:end, :]], dim=0).permute(0, 3, 1, 2)
             self.S_trgt.append(s_trgt.clone())
             pbar.update(1)
         pbar.close()
