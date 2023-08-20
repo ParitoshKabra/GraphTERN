@@ -6,6 +6,7 @@ dataset_array=("eth" "hotel" "univ" "zara1" "zara2")
 device_id_array=(0 1 2 3 4)
 prefix="graph-tern_"
 suffix="_experiment"
+epoch=32
 
 # Arguments
 while getopts p:s:d:i: flag
@@ -48,7 +49,7 @@ for (( i=0; i<${#dataset_array[@]}; i++ ))
 do
   printf "Testing ${dataset_array[$i]}"
   CUDA_VISIBLE_DEVICES=${device_id_array[$i]} python3 test.py \
-  --tag "${prefix}""${dataset_array[$i]}""${suffix}" &
+  --tag "${prefix}""${dataset_array[$i]}""${suffix}" --epoch "$epoch" &
   PID_array[$i]=$!
   printf " job ${#PID_array[@]} pid ${PID_array[$i]}\n"
   wait ${PID_array[$i]}

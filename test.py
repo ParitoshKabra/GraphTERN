@@ -1,4 +1,4 @@
-import pickle
+mport pickle
 import argparse
 import torch
 import numpy as np
@@ -11,8 +11,9 @@ from torch.utils.data import DataLoader
 # Argument parsing
 parser = argparse.ArgumentParser()
 parser.add_argument('--tag', default='tag', help='Personal tag for the model')
-parser.add_argument('--n_samples', type=int, default=20, help='Number of samples')
-parser.add_argument('--epoch_eval', type=int, default=27, help='Which epoch to test the model on')
+parser.add_argument('--n_samples', type=int, default=20,
+                    help='Number of samples')
+parser.add_argument('--epoch', type=int, default=20, help='Number of epochs')
 test_args = parser.parse_args()
 
 # Get arguments for training
@@ -23,12 +24,13 @@ with open(args_path, 'rb') as f:
     args = pickle.load(f)
 
 dataset_path = './datasets/' + args.dataset + '/'
-model_path = checkpoint_dir + args.dataset + f'_best{test_args.epoch_eval}.pth'
-KSTEPS = test_args.n_samples
+model_path = checkpoint_dir + args.dataset + f'_best{test_args.epoch}.pth'
 
 # Data preparation
-test_dataset = TrajectoryDataset(dataset_path + 'test/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
-test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
+test_dataset = TrajectoryDataset(
+    dataset_path + 'test/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
+test_loader = DataLoader(test_dataset, batch_size=1,
+                         shuffle=False, num_workers=0, pin_memory=True)
 
 # Model preparation
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
@@ -50,7 +52,8 @@ def test(KSTEPS=20):
         S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
 
         # Run Graph-TERN model
-        V_init, V_pred, V_refi, valid_mask = model(S_obs, pruning=4)
+        V_init, V_pred, V_refi, valid_mask = model(
+            S_obs, pruning=4, clustering=True)
 
         # Calculate ADEs and FDEs for each refined trajectory
         V_trgt_abs = S_trgt[:, 0].squeeze(dim=0)
@@ -75,7 +78,7 @@ def main():
     # Repeat the evaluation to reduce randomness
     repeat = 10
     for i in range(repeat):
-        temp = test(KSTEPS=20)
+        temp = test(KSTEPS=test_args.n_samples)
         ade_refi.append(temp[0])
         fde_refi.append(temp[1])
 
@@ -91,3 +94,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
