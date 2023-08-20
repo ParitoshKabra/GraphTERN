@@ -1,4 +1,4 @@
-mport pickle
+import pickle
 import argparse
 import torch
 import numpy as np
@@ -13,7 +13,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--tag', default='tag', help='Personal tag for the model')
 parser.add_argument('--n_samples', type=int, default=20,
                     help='Number of samples')
-parser.add_argument('--epoch', type=int, default=20, help='Number of epochs')
 test_args = parser.parse_args()
 
 # Get arguments for training
@@ -24,7 +23,6 @@ with open(args_path, 'rb') as f:
     args = pickle.load(f)
 
 dataset_path = './datasets/' + args.dataset + '/'
-model_path = checkpoint_dir + args.dataset + f'_best{test_args.epoch}.pth'
 
 # Data preparation
 test_dataset = TrajectoryDataset(
@@ -32,11 +30,9 @@ test_dataset = TrajectoryDataset(
 test_loader = DataLoader(test_dataset, batch_size=1,
                          shuffle=False, num_workers=0, pin_memory=True)
 
-# Model preparation
-model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
-                   seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
-model = model.cuda()
-model.load_state_dict(torch.load(model_path), strict=False)
+model_path = None
+model = None
+ade_refi, fde_refi = [], []
 
 
 def test(KSTEPS=20):
@@ -72,26 +68,52 @@ def test(KSTEPS=20):
     return ade_refi, fde_refi
 
 
-def main():
-    ade_refi, fde_refi = [], []
-
+def test_specific_epoch(pth_file):
+    global ade_refi, fde_refi, model_path, model
+    
+    model_path = checkpoint_dir + pth_file
+    # Model preparation
+    print(model_path)
+    model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
+                       seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
+    model = model.cuda()
+    model.load_state_dict(torch.load(model_path), strict=False)
     # Repeat the evaluation to reduce randomness
     repeat = 10
+    ade, fde = [], []
     for i in range(repeat):
         temp = test(KSTEPS=test_args.n_samples)
-        ade_refi.append(temp[0])
-        fde_refi.append(temp[1])
+        ade.append(temp[0])
+        fde.append(temp[1])
 
-    ade_refi = np.mean(ade_refi)
-    fde_refi = np.mean(fde_refi)
+    ade_refi.append(np.mean(ade))
+    fde_refi.append(np.mean(fde))
 
     result_lines = ["Evaluating model: {}".format(test_args.tag),
-                    "Refined_ADE: {0:.8f}, Refined_FDE: {1:.8f}".format(ade_refi, fde_refi)]
+                    "Refined_ADE: {0:.8f}, Refined_FDE: {1:.8f}".format(np.mean(ade), np.mean(fde))]
+
+    for line in result_lines:
+        print(line)
+
+
+def main():
+    global ade_refi, fde_refi
+    import os
+    files = os.listdir(checkpoint_dir)
+    pth_files = [filename for filename in files if filename.endswith(".pth")]
+    
+    print(pth_files)
+    for pth_file in pth_files:
+        test_specific_epoch(pth_file)
+
+    result_lines = ["Evaluating model: {}".format(test_args.tag),
+                    "Refined_ADE: {0:.8f}, Refined_FDE: {1:.8f}".format(np.min(ade_refi), np.min(fde_refi))]
 
     for line in result_lines:
         print(line)
 
 
 if __name__ == "__main__":
+    print("what")
     main()
 
