@@ -86,12 +86,20 @@ def transform_imputed(X):
     
     X = X.permute(0,1,3,2)
 
-    X_rel = torch.zeros(*X.shape)
+    X_rel = torch.zeros(*X.shape).cuda()
     X_rel[:,:,:,1:] = X[:,:,:,1:]-X[:,:,:,:-1]
 
     S_obs = torch.stack((X, X_rel), dim=1).permute(0,1,4,2,3)
     
     return S_obs
+
+def saits_loader(original_tensor):
+        nelems = original_tensor.numel()
+        ne_nan = int(0.20 * nelems)
+        nan_indices = random.sample(range(nelems), ne_nan)
+        new_tensor = original_tensor.clone().reshape(-1)
+        new_tensor[nan_indices] = float('nan')
+        return new_tensor.reshape(*original_tensor.shape)
 
 def train(epoch):
     global metrics, model
@@ -110,10 +118,14 @@ def train(epoch):
 
         S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
 
-        X_obs, X_trgt = [tensor.cuda() for tensor in batch[:2]]
+        X_obs, X_trgt = [tensor.cuda() for tensor in batch[2:4]]
    
         _, npeds, _, step_size = X_obs.shape
         X_obs_saits = X_obs.permute(0, 1, 3, 2).reshape(npeds, step_size, -1)
+
+        for i in range(npeds):
+            X_i = X_obs_saits[i]
+            X_obs_saits[i] = saits_loader(X_i)
 
         _, npeds, _, step_size = X_trgt.shape
 
