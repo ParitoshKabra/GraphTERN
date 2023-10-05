@@ -3,6 +3,7 @@
 
 import os
 import math
+import random
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -156,6 +157,9 @@ class TrajectoryDataset(Dataset):
         self.seq_start_end = [(start, end) for start, end in zip(
             cum_start_idx, cum_start_idx[1:])]
 
+        self.missing_obs_traj = self.saits_loader(self.obs_traj)
+        self.missing_pred_traj = self.saits_loader(self.pred_traj)
+
         # Convert Trajectories to Graphs
         self.S_obs = []
         self.S_trgt = []
@@ -175,6 +179,16 @@ class TrajectoryDataset(Dataset):
             pbar.update(1)
         pbar.close()
 
+
+    def saits_loader(self, original_tensor):
+        nelems = original_tensor.numel()
+        ne_nan = int(0.20 * nelems)
+        nan_indices = random.sample(range(nelems), ne_nan)
+        new_tensor = original_tensor.clone()
+        new_tensor.view(-1)[nan_indices] = float('nan')
+
+        return new_tensor
+
     def __len__(self):
         return self.num_seq
 
@@ -182,6 +196,7 @@ class TrajectoryDataset(Dataset):
         start, end = self.seq_start_end[index]
 
         out = [
+            self.missing_obs_traj[start:end, :], self.missing_pred_traj[start:end, :],
             self.obs_traj[start:end, :], self.pred_traj[start:end, :],
             self.obs_traj_rel[start:end, :], self.pred_traj_rel[start:end, :],
             self.non_linear_ped[start:end], self.loss_mask[start:end, :],

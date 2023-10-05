@@ -79,6 +79,19 @@ with open(checkpoint_dir + 'args.pkl', 'wb') as f:
 metrics = {'train_loss': [], 'val_loss': []}
 constant_metrics = {'min_val_epoch': -1, 'min_val_loss': 1e10}
 
+def transform_imputed(X):
+    
+    X= torch.round(X, decimals=4)
+    X = X.reshape(1, *X.shape)
+    
+    X = X.permute(0,1,3,2)
+
+    X_rel = torch.zeros(*X.shape)
+    X_rel[:,:,:,1:] = X[:,:,:,1:]-X[:,:,:,:-1]
+
+    S_obs = torch.stack((X, X_rel), dim=1).permute(0,1,4,2,3)
+    
+    return S_obs
 
 def train(epoch):
     global metrics, model
@@ -97,6 +110,18 @@ def train(epoch):
 
         S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
 
+        X_obs, X_trgt = [tensor.cuda() for tensor in batch[:2]]
+   
+        _, npeds, _, step_size = X_obs.shape
+        X_obs_saits = X_obs.permute(0, 1, 3, 2).reshape(npeds, step_size, -1)
+
+        _, npeds, _, step_size = X_trgt.shape
+
+        X_obs_saits, mae_saits_loss = saits_model(X_obs_saits)
+
+        S_obs = transform_imputed(X_obs_saits)
+
+
         # Data augmentation
         aug = True
         if aug:
@@ -108,7 +133,7 @@ def train(epoch):
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
         m_loss = mse_loss(V_refi, S_trgt[:, 0], valid_mask)
-        loss = r_loss + m_loss
+        loss = r_loss + m_loss + mae_saits_loss
 
         if torch.isnan(loss):
             pass
