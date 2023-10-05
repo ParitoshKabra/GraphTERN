@@ -14,5 +14,8 @@ def saits_model(X, n_steps=8, n_features=2, n_layers=2, d_model=256, d_inner=128
     saits.fit(dataset)  # train the model. Here I use the whole dataset as the training set, because ground truth is not visible to the model.
     imputation = saits.impute(dataset)
     imputation = torch.from_numpy(imputation)
+    imputation = imputation.cuda()
+    X_intact = X_intact.cuda()
+    indicating_mask = indicating_mask.cuda()
     mae = cal_mae(imputation, X_intact, indicating_mask)
     return imputation, mae
