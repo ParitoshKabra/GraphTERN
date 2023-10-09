@@ -79,9 +79,6 @@ def plot_grad_flow(named_parameters):
     plt.title("Gradient flow")
     plt.grid(True)
     plt.savefig(f"img/gradient-hotel")
-    # plt.legend([Line2D([0], [0], color="c", lw=4),
-    #             Line2D([0], [0], color="b", lw=4),
-    #             Line2D([0], [0], color="k", lw=4)], ['max-gradient', 'mean-gradient', 'zero-gradient'])
 
 # Data preparation
 # Batch size set to 1 because vertices vary by humans in each scene sequence.
@@ -175,7 +172,7 @@ def train(epoch):
 
         # Run Graph-TERN model
         V_init, V_pred, V_refi, valid_mask = model(S_obs, S_trgt)
-        plot_grad_flow(model.named_parameters())
+        # plot_grad_flow(model.named_parameters())
 
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
