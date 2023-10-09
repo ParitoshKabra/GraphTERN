@@ -60,8 +60,8 @@ def plot_grad_flow(named_parameters):
     max_grads= []
     layers = []
 
-    for n, p in named_parameters:
-        print("parameters:", n,p)
+    # for n, p in named_parameters:
+    #     print("parameters:", n,p)
 
     for n, p in named_parameters:
         if(p.requires_grad) and ("bias" not in n):
