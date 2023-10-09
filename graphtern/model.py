@@ -97,7 +97,7 @@ class graph_tern(nn.Module):
         ##################################################
         #             Trajectory Refinement              #
         ##################################################
-
+        print(f'{V_init.shape=}')
         # Guided point sampling
         Gamma = V_obs_rel.mean(dim=1).norm(p=2, dim=-1).squeeze(dim=0) / self.gamma
         Gamma /= self.pred_seq_len  # code optimization for linear interpolation (pre-division)
@@ -115,6 +115,7 @@ class graph_tern(nn.Module):
             for i in range(self.n_ways):
                 # NMVC -> NVMC
                 temp = V_init_list[i].transpose(1, 2).contiguous()
+                print(f'{temp.shape=}')
                 mix = Categorical(torch.nn.functional.softmax(temp[:, :, :, 4], dim=-1))
                 comp = Independent(Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
                 gmm = MixtureSameFamily(mix, comp)

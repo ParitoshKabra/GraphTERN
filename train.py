@@ -145,7 +145,7 @@ def train(epoch):
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
         m_loss = mse_loss(V_refi, S_trgt[:, 0], valid_mask)
-        loss = r_loss + m_loss + mae_saits_loss
+        loss = r_loss + m_loss
 
         if torch.isnan(loss):
             pass
