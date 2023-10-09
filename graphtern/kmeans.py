@@ -128,7 +128,7 @@ class BatchKMeans(nn.Module):
 
 
 if __name__ == "__main__":
-    x = torch.randn(13, 29, 2, 1000).cuda()
+    x = torch.randn(13, 29, 2, 1000).to(device)
     multi_k_means = BatchKMeans(n_clusters=20, n_redo=1)
     multi_k_means.fit(x)
     print(multi_k_means.centroids.shape)

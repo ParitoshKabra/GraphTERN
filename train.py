@@ -9,7 +9,6 @@ from graphtern import *
 from utils import *
 from torch.utils.data import DataLoader
 
-
 # Reproducibility
 torch.manual_seed(0)
 random.seed(0)
@@ -64,7 +63,7 @@ val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=0,
 # Model preparation
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
-model = model.cuda()
+model = model.to(device)
 
 optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
 if args.use_lrschd:
@@ -86,7 +85,7 @@ def transform_imputed(X):
     
     X = X.permute(0,1,3,2)
 
-    X_rel = torch.zeros(*X.shape).cuda()
+    X_rel = torch.zeros(*X.shape).to(device)
     X_rel[:,:,:,1:] = X[:,:,:,1:]-X[:,:,:,:-1]
 
     S_obs = torch.stack((X, X_rel), dim=1).permute(0,1,4,2,3)
@@ -116,9 +115,9 @@ def train(epoch):
         if batch_idx % args.batch_size == 0:
             optimizer.zero_grad()
 
-        S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
+        S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
 
-        X_obs, X_trgt = [tensor.cuda() for tensor in batch[2:4]]
+        X_obs, X_trgt = [tensor.to(device) for tensor in batch[2:4]]
    
         _, npeds, _, step_size = X_obs.shape
         X_obs_saits = X_obs.permute(0, 1, 3, 2).reshape(npeds, step_size, -1)
@@ -182,7 +181,7 @@ def valid(epoch):
     progressbar.set_description('Valid Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
 
     for batch_idx, batch in enumerate(val_loader):
-        S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
+        S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
 
         # Run Graph-TERN model
         V_init, V_pred, V_refi, valid_mask = model(S_obs)

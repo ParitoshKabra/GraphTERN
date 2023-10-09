@@ -1,7 +1,7 @@
 import math
 import random
 import torch
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def data_sampler(S_obs, S_trgt, batch=4, scale=True, stretch=False, flip=True, rotation=True, noise=False):
     r"""Returns the Trajectories with batch size."""
@@ -41,7 +41,7 @@ def random_stretch(S_obs, S_trgt, min=0.9, max=1.1):
     r"""Returns the randomly stretched Trajectories."""
 
     scale = [random.uniform(min, max), random.uniform(min, max)]
-    scale = torch.tensor(scale).cuda()
+    scale = torch.tensor(scale).to(device)
     scale_a = torch.sqrt(scale[0] * scale[1])
     return S_obs * scale, S_trgt * scale
 
@@ -50,7 +50,7 @@ def random_flip(S_obs, S_trgt):
     r"""Returns the randomly flipped Trajectories."""
 
     flip = random.choice([[-1, -1], [-1, 1], [1, -1], [1, 1]])
-    flip = torch.tensor(flip).cuda()
+    flip = torch.tensor(flip).to(device)
     return S_obs * flip, S_trgt * flip
 
 
@@ -63,7 +63,7 @@ def random_rotation(S_obs, S_trgt):
 
     r_mat = [[math.cos(theta), -math.sin(theta)],
              [math.sin(theta), math.cos(theta)]]
-    r = torch.tensor(r_mat, dtype=torch.float, requires_grad=False).cuda()
+    r = torch.tensor(r_mat, dtype=torch.float, requires_grad=False).to(device)
 
     S_obs = torch.einsum('rc,natvc->natvr', r, S_obs)
     S_trgt = torch.einsum('rc,natvc->natvr', r, S_trgt)

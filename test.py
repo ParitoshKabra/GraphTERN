@@ -7,6 +7,7 @@ from graphtern.model import graph_tern
 from utils.dataloader import TrajectoryDataset
 from torch.utils.data import DataLoader
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Argument parsing
 parser = argparse.ArgumentParser()
@@ -31,7 +32,7 @@ test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, num_workers=
 # Model preparation
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
-model = model.cuda()
+model = model.to(device)
 model.load_state_dict(torch.load(model_path), strict=False)
 
 
@@ -45,7 +46,7 @@ def test(KSTEPS=20):
     progressbar.set_description('Testing {}'.format(test_args.tag))
 
     for batch_idx, batch in enumerate(test_loader):
-        S_obs, S_trgt = [tensor.cuda() for tensor in batch[-2:]]
+        S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
 
         # Run Graph-TERN model
         V_init, V_pred, V_refi, valid_mask = model(S_obs, pruning=4, clustering=True)

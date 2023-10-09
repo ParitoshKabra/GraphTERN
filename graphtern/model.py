@@ -4,6 +4,7 @@ from torch.distributions import Categorical, Independent, Normal, MixtureSameFam
 from .stmrgcn import st_mrgcn, epcnn, trcnn
 from .kmeans import BatchKMeans
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def generate_adjacency_matrix(V):
     # V[NATVC] -> temp[NATVVC]
@@ -124,12 +125,12 @@ class graph_tern(nn.Module):
             valid_mask_s = (dest_s - V_dest_rel).norm(p=2, dim=-1).le(Gamma).type(torch.float)
 
             # Guided endpoint sampling
-            eps_r = torch.rand(self.n_smpl, V_dest_rel.size(1), device='cuda') * Gamma  # NV
-            eps_t = torch.rand(self.n_smpl, V_dest_rel.size(1), device='cuda')  # NV
+            eps_r = torch.rand(self.n_smpl, V_dest_rel.size(1), device=device) * Gamma  # NV
+            eps_t = torch.rand(self.n_smpl, V_dest_rel.size(1), device=device)  # NV
             eps_x = eps_r * eps_t.cos()
             eps_y = eps_r * eps_t.sin()
             dest_g = V_dest_rel + torch.stack([eps_x, eps_y], dim=-1)
-            valid_mask_g = torch.ones(self.n_smpl, V_dest_rel.size(1), device='cuda')
+            valid_mask_g = torch.ones(self.n_smpl, V_dest_rel.size(1), device=device)
 
             # Concatenate all samples
             endpoint_set = torch.cat([dest_s, dest_g], dim=0)
@@ -150,7 +151,7 @@ class graph_tern(nn.Module):
 
             dest_s_list = torch.stack(dest_s_list, dim=3)
             endpoint_set = dest_s_list.mean(dim=3)
-            valid_mask = torch.ones(self.n_smpl, Gamma.size(0), device='cuda')
+            valid_mask = torch.ones(self.n_smpl, Gamma.size(0), device=device)
         elif clustering:
             # Test phase
             # Clustering approach
@@ -174,7 +175,7 @@ class graph_tern(nn.Module):
                 endpoint_set = batch_k_means.centroids.permute(2, 0, 1)
             else:
                 endpoint_set = endpoint_set_prune[:20]
-            valid_mask = torch.ones(self.n_smpl, Gamma.size(0), device='cuda')
+            valid_mask = torch.ones(self.n_smpl, Gamma.size(0), device=device)
         else:
             # Test phase
             # Endpoint sampling with GMM pruning
@@ -201,7 +202,7 @@ class graph_tern(nn.Module):
             argmax_index = (endpoint_set_prune.unsqueeze(dim=2) - endpoint_set_prune.unsqueeze(dim=1))
             argmax_index = argmax_index.norm(p=2, dim=-1).kthvalue(k=2, dim=2)[0].sum(dim=1).argmax(dim=0)
             endpoint_set = endpoint_set_prune[argmax_index, :, torch.arange(V_init.size(2))].transpose(0, 1)
-            valid_mask = torch.ones(self.n_smpl, Gamma.size(0), device='cuda')
+            valid_mask = torch.ones(self.n_smpl, Gamma.size(0), device=device)
 
         # Initial trajectory prediction
         # Linear interpolation NVC -> NTVC
