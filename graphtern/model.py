@@ -117,7 +117,11 @@ class graph_tern(nn.Module):
                 # NMVC -> NVMC
                 temp = V_init_list[i].transpose(1, 2).contiguous()
                 mix = Categorical(torch.nn.functional.softmax(temp[:, :, :, 4], dim=-1))
-                comp = Independent(Normal(temp[:, :, :, 0:2], temp[:, :, :, 2:4].exp()), 1)
+                mean = temp[:, :, :, 0:2]
+                scale = temp[:, :, :, 2:4].exp()
+                print(f"{scale=}")
+                norm = Normal(mean, scale)
+                comp = Independent(norm, 1)
                 gmm = MixtureSameFamily(mix, comp)
                 dest_s_list.append(gmm.sample((self.n_smpl,)).squeeze(dim=1))  # NVC
             dest_s_list = torch.stack(dest_s_list, dim=3)
