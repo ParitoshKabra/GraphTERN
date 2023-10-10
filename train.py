@@ -135,7 +135,7 @@ def transform_imputed(X):
 
 def saits_loader(original_tensor):
         nelems = original_tensor.numel()
-        ne_nan = int(0.0 * nelems)
+        ne_nan = int(0.1 * nelems)
         nan_indices = random.sample(range(nelems), ne_nan)
         new_tensor = original_tensor.clone().reshape(-1)
         new_tensor[nan_indices] = float('nan')
@@ -157,16 +157,25 @@ def train(epoch):
             optimizer.zero_grad()
 
         S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
+        
+        # Data augmentation
+        aug = True
+        if aug:
+            S_obs, S_trgt = data_sampler(S_obs, S_trgt, batch=1)
 
-        X_obs, X_trgt = [tensor.to(device) for tensor in batch[2:4]]
+        # print(S_obs[:,0].shape)
 
-        X_obs_rel, X_trgt_rel = [tensor.to(device) for tensor in batch[4:6]]
-   
-        _, npeds, _, step_size = X_obs.shape
-        X_obs_saits = X_obs.permute(0, 1, 3, 2).reshape(npeds, step_size, -1)
 
-        _, npeds, _, step_size = X_obs_rel.shape
-        X_obs_rel_saits = X_obs_rel.permute(0, 1, 3, 2).reshape(npeds, step_size, -1)
+        X_obs_saits = S_obs[:,0].clone().to(device).permute(0, 2, 3, 1)
+        X_obs_rel_saits = S_obs[:, 1].clone().to(device).permute(0,2,3,1)
+
+        # print(f'{X_obs_saits.shape=}')
+
+        _, npeds, _, step_size = X_obs_saits.shape
+        X_obs_saits = X_obs_saits.permute(0, 1, 3, 2).reshape(npeds, step_size, -1)
+
+        _, npeds, _, step_size = X_obs_rel_saits.shape
+        X_obs_rel_saits = X_obs_rel_saits.permute(0, 1, 3, 2).reshape(npeds, step_size, -1)
 
         for i in range(npeds):
             X_i = X_obs_saits[i]
@@ -176,32 +185,25 @@ def train(epoch):
             X_i = X_obs_rel_saits[i]
             X_obs_rel_saits[i] = saits_loader(X_i)
 
+
         X_saits = torch.cat((X_obs_saits, X_obs_rel_saits), dim=2)
-
         X_obs_saits, mae_saits_loss = saits_model(X_saits)
-
         S_obs_imputed = transform_imputed(X_obs_saits)
-
         absolute_diff = torch.abs(S_obs_imputed - S_obs)
-
         mae_loss = torch.mean(absolute_diff)
 
         print(f'{mae_loss=}')
+        print(f'{mae_saits_loss=}')
 
         S_obs = S_obs_imputed
 
-        # Data augmentation
-        aug = True
-        if aug:
-            S_obs, S_trgt = data_sampler(S_obs, S_trgt, batch=1)
-        print(S_obs.shape)
         # Run Graph-TERN model
         V_init, V_pred, V_refi, valid_mask = model(S_obs, S_trgt)
 
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
         m_loss = mse_loss(V_refi, S_trgt[:, 0], valid_mask)
-        loss = r_loss + m_loss
+        loss = r_loss + m_loss + mae_loss
 
         if torch.isnan(loss):
             pass
