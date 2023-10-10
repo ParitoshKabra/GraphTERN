@@ -72,7 +72,7 @@ def plot_grad_flow(named_parameters):
                 print(i, n, p)
                 continue
             layers.append(n)
-            ave_grads.append(p.grad.abs().mean())
+            ave_grads.append(p.grad.cpu().abs().mean())
             # max_grads.append(p.grad.abs().max())
     plt.plot(ave_grads, alpha=0.3, color="b")
     # plt.plot(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
@@ -203,7 +203,7 @@ def train(epoch):
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
         m_loss = mse_loss(V_refi, S_trgt[:, 0], valid_mask)
-        loss = r_loss + m_loss + mae_loss
+        loss = r_loss + m_loss
 
         if torch.isnan(loss):
             pass
