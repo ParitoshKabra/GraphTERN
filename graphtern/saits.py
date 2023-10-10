@@ -7,7 +7,7 @@ from pypots.utils.metrics import cal_mae
 import torch
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def saits_model(X, n_steps=8, n_features=2, n_layers=2, d_model=256, d_inner=128, n_heads=4, d_k=64, d_v=64, dropout=0.1, epochs=10 ):
+def saits_model(X, n_steps=8, n_features=4, n_layers=2, d_model=256, d_inner=128, n_heads=4, d_k=64, d_v=64, dropout=0.1, epochs=50 ):
     # Reshape the tensor to 2D (40 x 2)
     tensor_2d = X.reshape(-1, 2).cpu().numpy()
 

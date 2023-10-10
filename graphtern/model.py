@@ -119,7 +119,7 @@ class graph_tern(nn.Module):
                 mix = Categorical(torch.nn.functional.softmax(temp[:, :, :, 4], dim=-1))
                 mean = temp[:, :, :, 0:2]
                 scale = temp[:, :, :, 2:4].exp()
-                print(f"{scale=}")
+                # print(f"{scale=}")
                 norm = Normal(mean, scale)
                 comp = Independent(norm, 1)
                 gmm = MixtureSameFamily(mix, comp)
