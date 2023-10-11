@@ -104,7 +104,7 @@ model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_tr
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
 model = model.to(device)
 
-optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
 if args.use_lrschd:
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_sh_rate, gamma=0.8)
 
