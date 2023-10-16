@@ -7,7 +7,13 @@ from pypots.utils.metrics import cal_mae
 import torch
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def saits_model(X, n_steps=8, n_features=4, n_layers=2, d_model=256, d_inner=128, n_heads=4, d_k=64, d_v=64, dropout=0.1, epochs=100 ):
+def create_saits_model(n_steps=8, n_features=4, n_layers=2, d_model=256, d_inner=128, n_heads=4, d_k=64, d_v=64, dropout=0.1, epochs=100):
+    global saits
+    saits = SAITS(n_steps=n_steps, n_features=n_features, n_layers=n_layers, d_model=d_model, d_inner=d_inner, n_heads=n_heads, d_k=d_k, d_v=d_v, dropout=dropout, epochs=epochs)
+    return saits
+
+def saits_model(X):
+    global saits
     # Reshape the tensor to 2D (40 x 2)
     # tensor_2d = X.reshape(-1, 2).cpu().numpy()
 
@@ -20,7 +26,6 @@ def saits_model(X, n_steps=8, n_features=4, n_layers=2, d_model=256, d_inner=128
 
     X_intact, X, missing_mask, indicating_mask = mcar(X, 0.1) # hold out 10% observed values as ground truth
     X = masked_fill(X, 1 - missing_mask, np.nan)
-    saits = SAITS(n_steps=n_steps, n_features=n_features, n_layers=n_layers, d_model=d_model, d_inner=d_inner, n_heads=n_heads, d_k=d_k, d_v=d_v, dropout=dropout, epochs=epochs)
     dataset = {"X": X}
     saits.fit(dataset)  # train the model. Here I use the whole dataset as the training set, because ground truth is not visible to the model.
     imputation = saits.impute(dataset)

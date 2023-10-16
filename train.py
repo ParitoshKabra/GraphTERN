@@ -121,6 +121,7 @@ val_loader = DataLoader(val_dataset, batch_size=1,
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
 model = model.to(device)
+saits = create_saits_model()
 
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=(1e-5)/2)
 if args.use_lrschd:
@@ -163,7 +164,7 @@ def saits_loader(original_tensor):
 
 
 def train(epoch):
-    global metrics, model
+    global metrics, model, saits
     model.train()
     loss_batch = 0.
     r_loss_batch, m_loss_batch = 0., 0.
@@ -255,7 +256,7 @@ def train(epoch):
 
 
 def valid(epoch):
-    global metrics, constant_metrics, model
+    global metrics, constant_metrics, model, saits
     model.eval()
     loss_batch = 0.
     r_loss_batch, m_loss_batch = 0., 0.
