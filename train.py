@@ -3,6 +3,7 @@ import pickle
 import argparse
 import torch
 import random
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -12,9 +13,9 @@ from torch.utils.data import DataLoader
 
 
 # Reproducibility
-torch.manual_seed(0)
-random.seed(0)
-np.random.seed(0)
+torch.manual_seed(42)
+random.seed(42)
+np.random.seed(42)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 torch.backends.cuda.matmul.allow_tf32 = False
@@ -73,6 +74,7 @@ def plot_grad_flow(named_parameters):
     max_grads = []
     layers = []
 
+
     # for n, p in named_parameters:
     #     print("parameters:", n,p)
     i = 0
@@ -82,11 +84,12 @@ def plot_grad_flow(named_parameters):
             # print(f'{type(p.grad)=}')
             # if p.grad != None:
             if p.grad == None:
-                print(i, n, p)
+                # print(i, n, p)
                 continue
             layers.append(n)
             ave_grads.append(p.grad.cpu().abs().mean())
             # max_grads.append(p.grad.abs().max())
+
     plt.plot(ave_grads, alpha=0.3, color="b")
     # plt.plot(np.arange(len(max_grads)), max_grads, alpha=0.1, lw=1, color="c")
     # plt.bar(np.arange(len(max_grads)), ave_grads, alpha=0.1, lw=1, color="b")
@@ -116,6 +119,9 @@ val_dataset = TrajectoryDataset(
     dataset_path + 'val/', obs_len=args.obs_seq_len, pred_len=args.pred_seq_len, skip=1)
 val_loader = DataLoader(val_dataset, batch_size=1,
                         shuffle=False, num_workers=0, pin_memory=True)
+
+plt.figure(figsize=(20, 20))
+
 
 # Model preparation
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
@@ -155,10 +161,11 @@ def transform_imputed(X):
 
 def saits_loader(original_tensor):
     nelems = original_tensor.numel()
-    ne_nan = int(0.01 * nelems)
+    ne_nan = int(0.0 * nelems)
     nan_indices = random.sample(range(nelems), ne_nan)
     new_tensor = original_tensor.clone().reshape(-1)
     new_tensor[nan_indices] = float('nan')
+    assert torch.any(new_tensor.isnan()) == False
     return new_tensor.reshape(*original_tensor.shape)
 
 
@@ -169,7 +176,7 @@ def train(epoch):
     r_loss_batch, m_loss_batch = 0., 0.
     loader_len = len(train_loader)
 
-    progressbar = tqdm(range(loader_len))
+    progressbar = tqdm(range(loader_len), file=sys.stdout)
     progressbar.set_description(
         'Train Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
     optimizer.zero_grad()
@@ -196,7 +203,12 @@ def train(epoch):
         S_obs_imputed = transform_imputed(X_obs_saits)
         diff = torch.abs(S_obs - S_obs_imputed)
         mae_loss = torch.mean(diff)
-        print(f"{mae_loss=}")
+        max_value = torch.max(diff)
+        print("Maximum value:", max_value.item())
+
+        max_value = torch.max(S_obs)
+        print("Maximum value S_obs:", max_value.item())
+        # print(f"{mae_loss=}")
         S_obs = S_obs_imputed
 
         # Data augmentation
@@ -210,7 +222,7 @@ def train(epoch):
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
         m_loss = mse_loss(V_refi, S_trgt[:, 0], valid_mask)
-        loss = r_loss + m_loss + mae_loss
+        loss = r_loss + m_loss
 
         if torch.isnan(loss):
             pass
@@ -231,8 +243,8 @@ def train(epoch):
             r_loss_batch = 0.
             m_loss_batch = 0.
 
-        progressbar.set_description('Train Epoch: {0} Loss: {1:.8f}'.format(
-            epoch, loss.item() / args.batch_size))
+        progressbar.set_description('Train Epoch: {0} Loss: {1:.8f} Mae_Loss: {2: .8f}'.format(
+            epoch, loss.item() / args.batch_size , mae_loss.item()))
         progressbar.update(1)
 
     progressbar.close()

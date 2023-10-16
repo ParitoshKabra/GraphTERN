@@ -81,12 +81,15 @@ class graph_tern(nn.Module):
 
         # NTVC -> NCTV
         V_init = V_obs_rel.permute(0, 3, 1, 2).contiguous()
+        # print(" here 1" ,V_init)
+
 
         for k in range(self.n_epgcn):
             V_init, A_obs = self.tp_mrgcns[k](V_init, A_obs)
 
         # NCTV -> NTCV
         V_init = V_init.permute(0, 2, 1, 3).contiguous()
+
 
         for k in range(self.n_epcnn):
             V_init = self.tpcnns[k](V_init)
