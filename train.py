@@ -155,7 +155,7 @@ def transform_imputed(X):
 
 def saits_loader(original_tensor):
     nelems = original_tensor.numel()
-    ne_nan = int(0.1 * nelems)
+    ne_nan = int(0.01 * nelems)
     nan_indices = random.sample(range(nelems), ne_nan)
     new_tensor = original_tensor.clone().reshape(-1)
     new_tensor[nan_indices] = float('nan')
