@@ -174,6 +174,7 @@ def train(epoch):
     progressbar.set_description(
         'Train Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
     optimizer.zero_grad()
+
     for batch_idx, batch in enumerate(train_loader):
         # sum gradients till idx reach to batch_size
         if batch_idx % args.batch_size == 0:
@@ -301,6 +302,45 @@ def valid(epoch):
 
 
 def main():
+    tensors  = []
+
+    for batch_idx, batch in enumerate(train_loader):
+        S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
+
+        # Data augmentation
+        aug = True
+        if aug:
+            S_obs, S_trgt = data_sampler(S_obs, S_trgt, batch=1)
+
+        # print(S_obs[:,0].shape)
+
+        X_obs_saits = S_obs[:, 0].clone().to(device).permute(0, 2, 3, 1)
+        X_obs_rel_saits = S_obs[:, 1].clone().to(device).permute(0, 2, 3, 1)
+
+        # print(f'{X_obs_saits.shape=}')
+
+        _, npeds, _, step_size = X_obs_saits.shape
+        X_obs_saits = X_obs_saits.permute(
+            0, 1, 3, 2).reshape(npeds, step_size, -1)
+
+        _, npeds, _, step_size = X_obs_rel_saits.shape
+        X_obs_rel_saits = X_obs_rel_saits.permute(
+            0, 1, 3, 2).reshape(npeds, step_size, -1)
+
+        for i in range(npeds):
+            X_i = X_obs_saits[i]
+            X_obs_saits[i] = saits_loader(X_i)
+
+        for i in range(npeds):
+            X_i = X_obs_rel_saits[i]
+            X_obs_rel_saits[i] = saits_loader(X_i)
+
+        X_saits = torch.cat((X_obs_saits, X_obs_rel_saits), dim=2)
+        tensors.append(X_saits)
+    combined_dataset = torch.cat(tensors, dim=0)
+    saits_model(combined_dataset)
+
+
     for epoch in range(args.num_epochs):
         train(epoch)
         valid(epoch)
