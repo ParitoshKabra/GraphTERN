@@ -82,7 +82,7 @@ def plot_grad_flow(named_parameters):
             # print(f'{type(p.grad)=}')
             # if p.grad != None:
             if p.grad == None:
-                print(i, n, p)
+                #print(i, n, p)
                 continue
             layers.append(n)
             ave_grads.append(p.grad.cpu().abs().mean())
@@ -121,7 +121,7 @@ val_loader = DataLoader(val_dataset, batch_size=1,
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
 model = model.to(device)
-saits = create_saits_model()
+saits = create_saits_model(epochs=200)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=(1e-5)/2)
 if args.use_lrschd:
@@ -211,13 +211,11 @@ def train(epoch):
             X_obs_rel_saits[i] = saits_loader(X_i)
 
         X_saits = torch.cat((X_obs_saits, X_obs_rel_saits), dim=2)
-        X_obs_saits, mae_saits_loss = saits_model(X_saits)
+        # X_obs_saits, mae_saits_loss = saits_model(X_saits)
+        X_obs_saits, mae_saits_loss = saits_impute(X_saits)
         S_obs_imputed = transform_imputed(X_obs_saits)
         absolute_diff = torch.abs(S_obs_imputed - S_obs)
-        mae_loss = torch.mean(absolute_diff)
-
-        print(f'{mae_loss=}')
-        print(f'{mae_saits_loss=}')
+        mae_diff = torch.max(absolute_diff)
 
         S_obs = S_obs_imputed
 
@@ -248,8 +246,8 @@ def train(epoch):
             r_loss_batch = 0.
             m_loss_batch = 0.
 
-        progressbar.set_description('Train Epoch: {0} Loss: {1:.8f}'.format(
-            epoch, loss.item() / args.batch_size))
+        progressbar.set_description('Train Epoch: {0} Loss: {1:.8f} Max_MAE: {2: .8f}'.format(
+            epoch, loss.item() / args.batch_size, mae_diff))
         progressbar.update(1)
 
     progressbar.close()
@@ -301,7 +299,7 @@ def valid(epoch):
                    args.dataset + '_best.pth')
 
 
-def main():
+def pre_train_saits():
     tensors  = []
 
     for batch_idx, batch in enumerate(train_loader):
@@ -340,6 +338,17 @@ def main():
     combined_dataset = torch.cat(tensors, dim=0)
     saits_model(combined_dataset)
 
+def main():
+    import os
+    import pickle
+    global saits
+    saits_pkl = 'pre-train/saits.pth'
+
+    if os.path.exists(saits_pkl):
+        saits.model.load_state_dict(torch.load(saits_pkl))
+    else:
+        pre_train_saits()
+        torch.save(saits.model.state_dict(), saits_pkl)
 
     for epoch in range(args.num_epochs):
         train(epoch)
