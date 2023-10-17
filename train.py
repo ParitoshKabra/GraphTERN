@@ -121,7 +121,7 @@ val_loader = DataLoader(val_dataset, batch_size=1,
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
 model = model.to(device)
-saits = create_saits_model(epochs=200)
+saits = create_saits_model(epochs=1)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=(1e-5)/2)
 if args.use_lrschd:

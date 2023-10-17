@@ -42,8 +42,21 @@ def saits_impute(X):
     X_intact, X, missing_mask, indicating_mask = mcar(X, 0.1) # hold out 10% observed values as ground truth
     X = masked_fill(X, 1 - missing_mask, np.nan)
     dataset = {"X": X}
-    imputation = saits.impute(dataset)
-    imputation = torch.from_numpy(imputation)
+
+    missing_mask = (~torch.isnan(X)).to(torch.float32)
+    missing_mask = missing_mask.reshape(*X.shape)
+    data = [X, missing_mask]
+    # print(f'{X=}')
+    # print(f'{missing_mask=}')
+    X, missing_mask = map(lambda x: x.to(device), data)
+    data = {
+        "X": torch.nan_to_num(X, nan=0.0),
+        "missing_mask": missing_mask,
+    }
+    results = saits.model.forward(data, training=False)
+    imputation = results["imputed_data"]
+    # imputation = saits.impute(dataset)
+    # imputation = torch.from_numpy(imputation)
     imputation = imputation.to(device)
     X_intact = X_intact.to(device)
     indicating_mask = indicating_mask.to(device)
