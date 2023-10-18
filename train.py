@@ -121,7 +121,7 @@ val_loader = DataLoader(val_dataset, batch_size=1,
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
 model = model.to(device)
-saits = create_saits_model(epochs=1)
+saits = create_saits_model(epochs=10)
 
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=(1e-5)/2)
 if args.use_lrschd:
@@ -181,18 +181,16 @@ def train(epoch):
             optimizer.zero_grad()
 
         S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
-
+        # print(f"{S_obs[:, 1]=}")
         # Data augmentation
         aug = True
         if aug:
             S_obs, S_trgt = data_sampler(S_obs, S_trgt, batch=1)
 
-        # print(S_obs[:,0].shape)
 
         X_obs_saits = S_obs[:, 0].clone().to(device).permute(0, 2, 3, 1)
         X_obs_rel_saits = S_obs[:, 1].clone().to(device).permute(0, 2, 3, 1)
 
-        # print(f'{X_obs_saits.shape=}')
 
         _, npeds, _, step_size = X_obs_saits.shape
         X_obs_saits = X_obs_saits.permute(
@@ -211,12 +209,10 @@ def train(epoch):
             X_obs_rel_saits[i] = saits_loader(X_i)
 
         X_saits = torch.cat((X_obs_saits, X_obs_rel_saits), dim=2)
-        # X_obs_saits, mae_saits_loss = saits_model(X_saits)
-        X_obs_saits, mae_saits_loss = saits_impute(X_saits)
+        X_obs_saits = saits_impute(X_saits)
         S_obs_imputed = transform_imputed(X_obs_saits)
         absolute_diff = torch.abs(S_obs_imputed - S_obs)
         mae_diff = torch.max(absolute_diff)
-
         S_obs = S_obs_imputed
 
         # Run Graph-TERN model
@@ -231,7 +227,7 @@ def train(epoch):
             pass
         else:
             loss.backward()
-            plot_grad_flow(model.named_parameters())
+            # plot_grad_flow(model.named_parameters())
             loss_batch += loss.item()
 
         r_loss_batch += r_loss.item()
@@ -336,13 +332,14 @@ def pre_train_saits():
         X_saits = torch.cat((X_obs_saits, X_obs_rel_saits), dim=2)
         tensors.append(X_saits)
     combined_dataset = torch.cat(tensors, dim=0)
+    print("Done combining")
     saits_model(combined_dataset)
 
 def main():
     import os
     import pickle
     global saits
-    saits_pkl = 'pre-train/saits.pth'
+    saits_pkl = f'pre-train/saits-{args.dataset}-tune64-Adam-test.pth'
 
     if os.path.exists(saits_pkl):
         saits.model.load_state_dict(torch.load(saits_pkl))
