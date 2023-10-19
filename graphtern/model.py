@@ -82,7 +82,8 @@ class graph_tern(nn.Module):
 
         # NTVC -> NCTV
         V_init = V_obs_rel.permute(0, 3, 1, 2).contiguous()
-
+        # print(V_init)
+        V_actual = V_init.detach().clone()
         for k in range(self.n_epgcn):
             V_init, A_obs = self.tp_mrgcns[k](V_init, A_obs)
 
@@ -116,6 +117,7 @@ class graph_tern(nn.Module):
             for i in range(self.n_ways):
                 # NMVC -> NVMC
                 temp = V_init_list[i].transpose(1, 2).contiguous()
+                # try:
                 mix = Categorical(torch.nn.functional.softmax(temp[:, :, :, 4], dim=-1))
                 mean = temp[:, :, :, 0:2]
                 scale = temp[:, :, :, 2:4].exp()
@@ -123,6 +125,9 @@ class graph_tern(nn.Module):
                 norm = Normal(mean, scale)
                 comp = Independent(norm, 1)
                 gmm = MixtureSameFamily(mix, comp)
+                # except:
+                #     print(f"{S_obs_inside=}")
+                #     raise Exception
                 dest_s_list.append(gmm.sample((self.n_smpl,)).squeeze(dim=1))  # NVC
             dest_s_list = torch.stack(dest_s_list, dim=3)
             dest_s = dest_s_list.mean(dim=3)

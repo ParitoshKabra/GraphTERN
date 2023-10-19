@@ -12,9 +12,9 @@ from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
 # Reproducibility
-torch.manual_seed(0)
-random.seed(0)
-np.random.seed(0)
+torch.manual_seed(1729)
+random.seed(1729)
+np.random.seed(1729)
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 torch.backends.cuda.matmul.allow_tf32 = False
@@ -52,8 +52,8 @@ parser.add_argument('--batch_size', type=int,
 parser.add_argument('--num_epochs', type=int,
                     default=512, help='Number of epochs')
 parser.add_argument('--clip_grad', type=float,
-                    default=200, help='Gradient clipping')
-parser.add_argument('--lr', type=float, default=0.00005, help='Learning rate')
+                    default=None, help='Gradient clipping')
+parser.add_argument('--lr', type=float, default=0.0001, help='Learning rate')
 parser.add_argument('--lr_sh_rate', type=int, default=128,
                     help='Number of steps to drop the lr')
 parser.add_argument('--use_lrschd', action="store_true",
@@ -61,7 +61,6 @@ parser.add_argument('--use_lrschd', action="store_true",
 parser.add_argument('--tag', default='tag', help='Personal tag for the model')
 
 args = parser.parse_args()
-
 
 def plot_grad_flow(named_parameters):
     '''Plots the gradients flowing through different layers in the net during training.
@@ -123,7 +122,8 @@ model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_tr
 model = model.to(device)
 saits = create_saits_model(epochs=10)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=(1e-5)/2)
+optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+# optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=(1e-5)/2)
 if args.use_lrschd:
     scheduler = torch.optim.lr_scheduler.StepLR(
         optimizer, step_size=args.lr_sh_rate, gamma=0.8)
@@ -187,7 +187,7 @@ def train(epoch):
         if aug:
             S_obs, S_trgt = data_sampler(S_obs, S_trgt, batch=1)
 
-
+        S_actual = S_obs.clone()
         X_obs_saits = S_obs[:, 0].clone().to(device).permute(0, 2, 3, 1)
         X_obs_rel_saits = S_obs[:, 1].clone().to(device).permute(0, 2, 3, 1)
 
@@ -213,11 +213,15 @@ def train(epoch):
         S_obs_imputed = transform_imputed(X_obs_saits)
         absolute_diff = torch.abs(S_obs_imputed - S_obs)
         mae_diff = torch.max(absolute_diff)
-        S_obs = S_obs_imputed
+        S_obs = S_obs_imputed.clone()
 
         # Run Graph-TERN model
+        # try:
         V_init, V_pred, V_refi, valid_mask = model(S_obs, S_trgt)
-
+        # except:
+        #     print(f"{S_actual=}")
+        #     print(f"{S_obs_imputed=}")
+        #     exit(1)
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
         m_loss = mse_loss(V_refi, S_trgt[:, 0], valid_mask)
@@ -339,7 +343,7 @@ def main():
     import os
     import pickle
     global saits
-    saits_pkl = f'pre-train/saits-{args.dataset}-tune64-Adam-test.pth'
+    saits_pkl = f'pre-train/saits-{args.dataset}-tune64-Adam-Scaled.pth'
 
     if os.path.exists(saits_pkl):
         saits.model.load_state_dict(torch.load(saits_pkl))
