@@ -8,6 +8,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 from torch.utils.data import Dataset
+import pickle
 
 
 def poly_fit(traj, traj_len, threshold):
@@ -68,17 +69,24 @@ class TrajectoryDataset(Dataset):
         self.seq_len = self.obs_len + self.pred_len
         self.delim = delim
 
-        all_files = sorted(os.listdir(self.data_dir))
-        all_files = [os.path.join(self.data_dir, _path) for _path in all_files]
+        # all_files = sorted(os.listdir(self.data_dir))
+        # all_files = [os.path.join(self.data_dir, _path) for _path in all_files]
+        all_files = [os.path.join(data_dir, path) for path in os.listdir(data_dir) if path[0] != "." and path.endswith(".txt")]
         num_peds_in_seq = []
         seq_list = []
         seq_list_rel = []
         loss_mask_list = []
         non_linear_ped = []
+        fet_map = {}
+        fet_list = []
         for path in all_files:
             print(path)
             data = read_file(path, delim)
             frames = np.unique(data[:, 0]).tolist()
+            hkl_path = os.path.splitext(path)[0] + ".pkl" 
+            with open(hkl_path, 'rb') as handle:
+                new_fet = pickle.load(handle)
+            fet_map[hkl_path] = torch.from_numpy(new_fet) 
             frame_data = []
             for frame in frames:
                 frame_data.append(data[frame == data[:, 0], :])
@@ -132,6 +140,8 @@ class TrajectoryDataset(Dataset):
                     loss_mask_list.append(curr_loss_mask[:num_peds_considered])
                     seq_list.append(curr_seq[:num_peds_considered])
                     seq_list_rel.append(curr_seq_rel[:num_peds_considered])
+                    fet_list.append(hkl_path)
+
 
         self.num_seq = len(seq_list)
         seq_list = np.concatenate(seq_list, axis=0)
@@ -139,6 +149,8 @@ class TrajectoryDataset(Dataset):
         loss_mask_list = np.concatenate(loss_mask_list, axis=0)
         non_linear_ped = np.asarray(non_linear_ped)
 
+        self.fet_map = fet_map
+        self.fet_list = fet_list
         # Convert numpy -> Torch Tensor
         self.obs_traj = torch.from_numpy(
             seq_list[:, :, :self.obs_len]).type(torch.float)
@@ -198,6 +210,7 @@ class TrajectoryDataset(Dataset):
             self.obs_traj[start:end, :], self.pred_traj[start:end, :],
             self.obs_traj_rel[start:end, :], self.pred_traj_rel[start:end, :],
             self.non_linear_ped[start:end], self.loss_mask[start:end, :],
-            self.S_obs[index], self.S_trgt[index]
+            self.S_obs[index], self.S_trgt[index],
+            self.fet_map[self.fet_list[index]]
         ]
         return out

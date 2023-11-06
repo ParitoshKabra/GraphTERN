@@ -10,6 +10,7 @@ from graphtern import *
 from utils import *
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+from pypots.optim.adam import Adam
 
 # Reproducibility
 torch.manual_seed(1729)
@@ -59,9 +60,11 @@ parser.add_argument('--lr_sh_rate', type=int, default=128,
 parser.add_argument('--use_lrschd', action="store_true",
                     default=False, help='Use lr rate scheduler')
 parser.add_argument('--tag', default='tag', help='Personal tag for the model')
-
+parser.add_argument('--nans', default=0.1, type=float, help='Number of nans prior to training')
+parser.add_argument('--saits-lr', default=1e-4, type=float, help='Learning Rate of pre-trained SAITS model')
 args = parser.parse_args()
 
+plt.figure(figsize=(20,20))
 def plot_grad_flow(named_parameters):
     '''Plots the gradients flowing through different layers in the net during training.
     Can be used for checking for possible gradient vanishing / exploding problems.
@@ -79,6 +82,7 @@ def plot_grad_flow(named_parameters):
         i += 1
         if(p.requires_grad) and ("bias" not in n):
             # print(f'{type(p.grad)=}')
+            # print(n)
             # if p.grad != None:
             if p.grad == None:
                 #print(i, n, p)
@@ -121,8 +125,9 @@ model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_tr
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
 model = model.to(device)
 saits = create_saits_model(epochs=10)
+all_parameters = list(model.parameters()) + list(saits.model.parameters())
 
-optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+optimizer = torch.optim.SGD(all_parameters, lr=args.lr)
 # optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=(1e-5)/2)
 if args.use_lrschd:
     scheduler = torch.optim.lr_scheduler.StepLR(
@@ -131,7 +136,7 @@ if args.use_lrschd:
 # Train logging
 if not os.path.exists(checkpoint_dir):
     os.makedirs(checkpoint_dir)
-with open(checkpoint_dir + 'args.pkl', 'wb') as f:
+with open(checkpoint_dir + f'args-{args.nans}.pkl', 'wb') as f:
     pickle.dump(args, f)
 
 metrics = {'train_loss': [], 'val_loss': []}
@@ -154,16 +159,16 @@ def transform_imputed(X):
     return S_obs
 
 
-def saits_loader(original_tensor):
+def saits_loader(original_tensor, nans = 0.1):
     nelems = original_tensor.numel()
-    ne_nan = int(0.1 * nelems)
+    ne_nan = int(nans * nelems)
     nan_indices = random.sample(range(nelems), ne_nan)
     new_tensor = original_tensor.clone().reshape(-1)
     new_tensor[nan_indices] = float('nan')
     return new_tensor.reshape(*original_tensor.shape)
 
 
-def train(epoch):
+def train(epoch, nan=0):
     global metrics, model, saits
     model.train()
     loss_batch = 0.
@@ -174,13 +179,12 @@ def train(epoch):
     progressbar.set_description(
         'Train Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
     optimizer.zero_grad()
-
     for batch_idx, batch in enumerate(train_loader):
         # sum gradients till idx reach to batch_size
         if batch_idx % args.batch_size == 0:
             optimizer.zero_grad()
 
-        S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
+        S_obs, S_trgt, vgg_list = [tensor.to(device) for tensor in batch[-3:]]
         # print(f"{S_obs[:, 1]=}")
         # Data augmentation
         aug = True
@@ -202,11 +206,11 @@ def train(epoch):
 
         for i in range(npeds):
             X_i = X_obs_saits[i]
-            X_obs_saits[i] = saits_loader(X_i)
+            X_obs_saits[i] = saits_loader(X_i, nan)
 
         for i in range(npeds):
             X_i = X_obs_rel_saits[i]
-            X_obs_rel_saits[i] = saits_loader(X_i)
+            X_obs_rel_saits[i] = saits_loader(X_i, nan)
 
         X_saits = torch.cat((X_obs_saits, X_obs_rel_saits), dim=2)
         X_obs_saits = saits_impute(X_saits)
@@ -217,7 +221,7 @@ def train(epoch):
 
         # Run Graph-TERN model
         # try:
-        V_init, V_pred, V_refi, valid_mask = model(S_obs, S_trgt)
+        V_init, V_pred, V_refi, valid_mask = model(S_obs, S_trgt, vgg_list = vgg_list)
         # except:
         #     print(f"{S_actual=}")
         #     print(f"{S_obs_imputed=}")
@@ -231,7 +235,7 @@ def train(epoch):
             pass
         else:
             loss.backward()
-            # plot_grad_flow(model.named_parameters())
+            # plot_grad_flow(saits.model.named_parameters())
             loss_batch += loss.item()
 
         r_loss_batch += r_loss.item()
@@ -266,10 +270,10 @@ def valid(epoch):
         'Valid Epoch: {0} Loss: {1:.8f}'.format(epoch, 0))
 
     for batch_idx, batch in enumerate(val_loader):
-        S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
+        S_obs, S_trgt, vgg_list = [tensor.to(device) for tensor in batch[-3:]]
 
         # Run Graph-TERN model
-        V_init, V_pred, V_refi, valid_mask = model(S_obs)
+        V_init, V_pred, V_refi, valid_mask = model(S_obs, vgg_list = vgg_list)
 
         # Loss calculation
         r_loss = gaussian_mixture_loss(V_init, S_trgt[:, 1], args.n_ways)
@@ -296,14 +300,14 @@ def valid(epoch):
         constant_metrics['min_val_loss'] = metrics['val_loss'][-1]
         constant_metrics['min_val_epoch'] = epoch
         torch.save(model.state_dict(), checkpoint_dir +
-                   args.dataset + '_best.pth')
+                   args.dataset + str(args.nans) + f'_{epoch}_best.pth')
+        torch.save(saits.model.state_dict(), checkpoint_dir+f'saits/{args.dataset}_{args.nans}_{epoch}_best.pth')
 
-
-def pre_train_saits():
+def get_dataset():
     tensors  = []
-
+    # print(saits.optimizer)
     for batch_idx, batch in enumerate(train_loader):
-        S_obs, S_trgt = [tensor.to(device) for tensor in batch[-2:]]
+        S_obs, S_trgt, vgg_list = [tensor.to(device) for tensor in batch[-3:]]
 
         # Data augmentation
         aug = True
@@ -336,8 +340,10 @@ def pre_train_saits():
         X_saits = torch.cat((X_obs_saits, X_obs_rel_saits), dim=2)
         tensors.append(X_saits)
     combined_dataset = torch.cat(tensors, dim=0)
-    print("Done combining")
-    saits_model(combined_dataset)
+    return combined_dataset
+
+def pre_train_saits():
+    saits_model(get_dataset())
 
 def main():
     import os
@@ -350,11 +356,30 @@ def main():
     else:
         pre_train_saits()
         torch.save(saits.model.state_dict(), saits_pkl)
+    print(args.saits_lr)
+    saits.optimizer = Adam(lr = args.saits_lr, weight_decay= args.saits_lr/20)
+    saits.model.train()
+    # init_params = {}
+    
+    # for n,p in saits.model.named_parameters():
+    #     init_params[n] = p.clone()
 
     for epoch in range(args.num_epochs):
         train(epoch)
-        valid(epoch)
+        train(epoch, args.nans)
+        # curr_params={}
+        # for n,p in saits.model.named_parameters():
+        #     curr_params[n] = p
 
+        # for key in init_params:
+        #     print(init_params[key])
+        #     print(curr_params[key])
+        #     break
+        # print(init_params)
+        # print(curr_params)
+        # are_equal = all(torch.equal(init_params[key], curr_params[key]) for key in init_params)
+        # assert are_equal
+        valid(epoch)
         if args.use_lrschd:
             scheduler.step()
 
@@ -366,10 +391,10 @@ def main():
             constant_metrics['min_val_epoch'], constant_metrics['min_val_loss']))
         print(" ")
 
-        with open(checkpoint_dir + 'metrics.pkl', 'wb') as f:
+        with open(checkpoint_dir + f'metrics-{args.nans}.pkl', 'wb') as f:
             pickle.dump(metrics, f)
 
-        with open(checkpoint_dir + 'constant_metrics.pkl', 'wb') as f:
+        with open(checkpoint_dir + f'constant_metrics-{args.nans}.pkl', 'wb') as f:
             pickle.dump(constant_metrics, f)
 
 

@@ -6,16 +6,20 @@ dataset_array=("eth" "hotel" "univ" "zara1" "zara2")
 device_id_array=(0 1 2 3 4)
 prefix="graph-tern_"
 suffix="_experiment"
+nans=0.1
+lr=1e-4
 
 # Arguments
-while getopts p:s:d:i: flag
+while getopts p:s:d:i:n: flag
 do
   case "${flag}" in
     p) prefix=${OPTARG};;
     s) suffix=${OPTARG};;
     d) dataset_array=(${OPTARG});;
     i) device_id_array=(${OPTARG});;
-    *) echo "usage: $0 [-p PREFIX] [-s SUFFIX] [-d \"eth hotel univ zara1 zara2\"] [-i \"0 1 2 3 4\"]" >&2
+    n) nans=(${OPTARG});;
+    l) lr=(${OPTARG});;
+    *) echo "usage: $0 [-p PREFIX] [-s SUFFIX] [-d \"eth hotel univ zara1 zara2\"] [-i \"0 1 2 3 4\"] -n [<float value between 0 and 1>]" >&2
       exit 1 ;;
   esac
 done
@@ -48,7 +52,7 @@ for (( i=0; i<${#dataset_array[@]}; i++ ))
 do
   printf "Training ${dataset_array[$i]}"
   CUDA_VISIBLE_DEVICES=${device_id_array[$i]} python3 train.py \
-  --dataset "${dataset_array[$i]}" --tag "${prefix}""${dataset_array[$i]}""${suffix}" &
+  --dataset "${dataset_array[$i]}" --nans "${nans}" --saits-lr "${lr}" --tag "${prefix}""${dataset_array[$i]}""${suffix}" &
   PID_array[$i]=$!
   printf " job ${#PID_array[@]} pid ${PID_array[$i]}\n"
 done

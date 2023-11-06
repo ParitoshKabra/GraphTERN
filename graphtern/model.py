@@ -1,10 +1,29 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Independent, Normal, MixtureSameFamily
-from .stmrgcn import st_mrgcn, epcnn, trcnn
+from .stmrgcn import st_mrgcn, epcnn, trcnn, st_mrgcn_2
 from .kmeans import BatchKMeans
+from .hypergraph_generation.nearest_neighbour import generate_hyper_graph
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def generate_incidence_matrix(V, hyper_scales):
+
+    v = V[:,1,:,:,:]
+    batches = v.shape[0]
+    obs_len = v.shape[1]
+    agents = v.shape[2]
+    features = v.shape[3]
+    device = v.get_device()
+    H = []
+    for i in range(obs_len):
+        current_frame_features = v[:,i,:,:].clone()
+        current_frame_hypergraph_indices = generate_hyper_graph(current_frame_features,hyper_scales)
+        H.append(current_frame_hypergraph_indices.unsqueeze(1))
+    H = torch.cat(H, dim = 1)
+    return H
+
+
 
 def generate_adjacency_matrix(V):
     # V[NATVC] -> temp[NATVVC]
@@ -18,12 +37,14 @@ def generate_adjacency_matrix(V):
 
 
 class graph_tern(nn.Module):
-    def __init__(self, n_epgcn=1, n_epcnn=6, n_trgcn=1, n_trcnn=4, seq_len=8, pred_seq_len=12, n_ways=3, n_smpl=20):
+    def __init__(self, n_epgcn=1, n_epcnn=6, n_trgcn=1, n_trcnn=4, seq_len=8, pred_seq_len=12, n_ways=3, n_smpl=20, hyper_scales = [2,3,5,7,9]):
         super().__init__()
         # Control Point Prediction
         self.n_epgcn = n_epgcn
         self.n_epcnn = n_epcnn
         self.n_smpl = n_smpl
+        self.hyper_scales = hyper_scales
+
 
         # Trajectory Refinement
         self.n_trgcn = n_trgcn
@@ -34,7 +55,7 @@ class graph_tern(nn.Module):
         self.pred_seq_len = pred_seq_len
 
         # parameters
-        input_feat = 2
+        input_feat = 6
         hidden_feat = 16
         output_feat = 5
         kernel_size = 3
@@ -57,16 +78,16 @@ class graph_tern(nn.Module):
 
         # Trajectory Refinement
         self.st_mrgcns = nn.ModuleList()
-        self.st_mrgcns.append(st_mrgcn(in_channels=input_feat, out_channels=hidden_feat, kernel_size=(kernel_size, total_seq_len), relation=4))
+        self.st_mrgcns.append(st_mrgcn_2(in_channels=input_feat, out_channels=hidden_feat, kernel_size=(kernel_size, total_seq_len), relation=4))
         for j in range(1, self.n_trgcn):
-            self.st_mrgcns.append(st_mrgcn(in_channels=hidden_feat, out_channels=hidden_feat, kernel_size=(kernel_size, total_seq_len), relation=4))
+            self.st_mrgcns.append(st_mrgcn_2(in_channels=hidden_feat, out_channels=hidden_feat, kernel_size=(kernel_size, total_seq_len), relation=4))
 
         self.trcnns = nn.ModuleList()
         for j in range(0, self.n_trcnn-1):
             self.trcnns.append(trcnn(total_seq_len=total_seq_len, pred_seq_len=total_seq_len, in_channels=hidden_feat, out_channels=hidden_feat, t_ksize=(n_trcnn-j)*2+1))
-        self.trcnns.append(trcnn(total_seq_len=total_seq_len, pred_seq_len=pred_seq_len, in_channels=hidden_feat, out_channels=input_feat))
+        self.trcnns.append(trcnn(total_seq_len=total_seq_len, pred_seq_len=pred_seq_len, in_channels=hidden_feat, out_channels=2))
 
-    def forward(self, S_obs, S_trgt=None, pruning=None, clustering=False):
+    def forward(self, S_obs, S_trgt=None, pruning=None, clustering=False, vgg_list = None):
 
         ##################################################
         # Control Point Conditioned Endpoint Prediction  #
@@ -75,6 +96,7 @@ class graph_tern(nn.Module):
         # Generate multi-relational pedestrian graph
         # make adjacency matrix for observed 8 frames
         A_obs = generate_adjacency_matrix(S_obs).detach()
+        H_obs = generate_incidence_matrix(S_obs,self.hyper_scales)
 
         # Graph Control Point Prediction
         V_obs_abs = S_obs[:, 0]
@@ -85,7 +107,7 @@ class graph_tern(nn.Module):
         # print(V_init)
         V_actual = V_init.detach().clone()
         for k in range(self.n_epgcn):
-            V_init, A_obs = self.tp_mrgcns[k](V_init, A_obs)
+            V_init= self.tp_mrgcns[k](V_init, H_obs, vgg_list)
 
         # NCTV -> NTCV
         V_init = V_init.permute(0, 2, 1, 3).contiguous()
@@ -221,20 +243,23 @@ class graph_tern(nn.Module):
         # repeat to sampled times (batch size)
         V_obs_rept = V_obs_rel.repeat_interleave(V_pred.size(0), dim=0)
         A_obs = A_obs.repeat_interleave(V_pred.size(0), dim=0)
+        H_obs = H_obs.repeat_interleave(V_pred.size(0), dim=0)
 
         # Graph Trajectory Refinement
         # make adjacency matrix for predicted 12 frames (will be iteratively change)
         A_pred = generate_adjacency_matrix(torch.stack([V_pred_abs, V_pred], dim=1))
+        H_pred = generate_incidence_matrix(torch.stack([V_pred_abs, V_pred], dim=1),self.hyper_scales)
 
         # concatenate to make full 20 frame sequences
         V = torch.cat([V_obs_rept, V_pred], dim=1).detach()
         A = torch.cat([A_obs, A_pred], dim=2).detach()
+        H = torch.cat([H_obs, H_pred], dim=1)
 
         # NTVC -> NCTV
         V_corr = V.permute(0, 3, 1, 2).contiguous()
 
         for k in range(self.n_trgcn):
-            V_corr, A = self.st_mrgcns[k](V_corr, A)
+            V_corr, A = self.st_mrgcns[k](V_corr, A, vgg_list)
 
         # NCTV -> NTCV
         V_corr = V_corr.permute(0, 2, 1, 3).contiguous()
