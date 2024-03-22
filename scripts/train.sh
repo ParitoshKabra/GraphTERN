@@ -52,7 +52,7 @@ for (( i=0; i<${#dataset_array[@]}; i++ ))
 do
   printf "Training ${dataset_array[$i]}"
   CUDA_VISIBLE_DEVICES=${device_id_array[$i]} python3 train.py \
-  --dataset "${dataset_array[$i]}" --nans "${nans}" --saits-lr "${lr}" --tag "${prefix}""${dataset_array[$i]}""${suffix}" &
+  --dataset "${dataset_array[$i]}" --nans "${nans}" --saits_lr "${lr}" --tag "${prefix}""${dataset_array[$i]}""${suffix}" &
   PID_array[$i]=$!
   printf " job ${#PID_array[@]} pid ${PID_array[$i]}\n"
 done

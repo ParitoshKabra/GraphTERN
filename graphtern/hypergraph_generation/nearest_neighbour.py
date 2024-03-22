@@ -28,8 +28,10 @@ def generate_hyper_graph(X,hyper_scales, is_prob=True, with_feature=False):
     m_neighbors_val_orig = torch.gather(m_dist, 2, m_neighbors_orig)
 
     H = []
+    W = []
     edge_idx_start = 0
     for scale in possible_hyper_scales:
+        # print("cur_scacle", scale)
         n_edges = n_nodes
         n_neighbors = scale-1
         # argsort => similiar to quicksort
@@ -42,6 +44,8 @@ def generate_hyper_graph(X,hyper_scales, is_prob=True, with_feature=False):
         # m_neighbors_val = (num_of_peds x m_neigbours)
         m_neighbors = m_neighbors_orig[:, :, :n_neighbors+1]
         m_neighbors_val = m_neighbors_val_orig[ :, :, :n_neighbors+1]
+        # print("values_1",m_neighbors)
+        # print("values_2",m_neighbors_val)
 
         # node_idx => dimension now becomes  1d array containing (num_of_pedsxm_neighbous) elements
         node_idx = m_neighbors.reshape(batch,-1)
@@ -64,6 +68,12 @@ def generate_hyper_graph(X,hyper_scales, is_prob=True, with_feature=False):
         col = edge_idx
 
         indices = torch.stack((row.unsqueeze(1),col.unsqueeze(1)),dim = 1).squeeze(2)
+        # print("shape", non_prob_values.shape)
+        # print("shape 2",values.shape)
+        # Check for NaN values
+        nan_indices = torch.isnan(values)
+        values[nan_indices] = 1
+        W.append(values)
         H.append(indices)
         # H = torch.sparse_coo_tensor(indices,values,size=(batn_nodes, n_edges), device=device)
         # H_sparse_list.append(H)
@@ -80,4 +90,5 @@ def generate_hyper_graph(X,hyper_scales, is_prob=True, with_feature=False):
         # weight_combined = torch.cat((weight_combined,w))
 
     H = torch.cat(H,dim = -1)
-    return H
+    W = torch.cat(W, dim  = -1)
+    return H, W

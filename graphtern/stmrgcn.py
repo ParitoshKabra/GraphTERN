@@ -67,9 +67,9 @@ class HyperGraphConv(nn.Module):
 
         # self.hyper_conv = nn.ModuleList()
         # for i in range(8):
-        #     self.hyper_conv.append(HypergraphConv(5,5,use_attention=use_attention))
+        #     self.hyper_conv.append(HypergraphConv(in_channels,out_channels,use_attention=use_attention))
 
-    def forward(self,x,H, sequential_scene_attention):
+    def forward(self,x,H, sequential_scene_attention, W):
         # x.shape = 1x2x8x3
 
         batches = x.shape[0]
@@ -94,11 +94,17 @@ class HyperGraphConv(nn.Module):
             # cur_x will have shape of 8x3x2
             cur_x = x[batch,:,:,:]
             cur_h = H[batch]
+            cur_w = W[batch]
             cur_node_features = torch.empty(0,num_of_peds,self.out_channels, device = x.get_device())
             for i in range(0,obs_len):
                 current_embeddings = cur_x[i]
                 current_hyperedge_indicies = cur_h[i]
-                ped_nodes_features = self.hyper_conv(x = current_embeddings,hyperedge_index = current_hyperedge_indicies)
+                current_weights = cur_w[i].detach()
+                current_weights = torch.where(current_weights < 0.001, torch.tensor(0.0, device = x.get_device()), current_weights)
+                # print(current_weights)
+                # print("here")
+                ped_nodes_features = self.hyper_conv(x = current_embeddings, hyperedge_index = current_hyperedge_indicies)
+                # print(ped_nodes_features)
                 cur_node_features = torch.cat((cur_node_features, ped_nodes_features.unsqueeze(0)),dim = 0)
             cur_node_features = cur_node_features.unsqueeze(0)
             final_node_feature = torch.cat((final_node_feature,cur_node_features))
@@ -165,7 +171,7 @@ class st_mrgcn(nn.Module):
         else:
             self.residual = nn.Sequential(nn.Conv2d(2, out_channels, kernel_size=1, stride=(stride, 1)),)
 
-    def forward(self, x, H, vgg):
+    def forward(self, x, H, vgg, W):
         # print("X shape", x.shape)
         # X.shape 1x2x8x7
         # X.shape batch x cooridnates x time x agents
@@ -180,7 +186,7 @@ class st_mrgcn(nn.Module):
         
 
         res = self.residual(x)
-        x = self.gcn(x, H, sequential_scene_attention)
+        x = self.gcn(x, H, sequential_scene_attention, W)
         x = self.tcn(x) + res
 
         if not self.use_mdn:

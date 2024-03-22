@@ -6,6 +6,7 @@ from tqdm import tqdm
 from graphtern.model import graph_tern
 from utils.dataloader import TrajectoryDataset
 from torch.utils.data import DataLoader
+from utils.visualizer import trajectory_visualizer, controlpoint_visualizer
 import os
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,7 +39,7 @@ model_paths = []
 
 for filename in sorted(os.listdir(checkpoint_dir)):
     # Check if the file ends with ".pth"
-    if filename.endswith(".pth"):
+    if filename.endswith(".pth") and filename.startswith(f"{args.dataset}{test_args.nan}_"):
         # Print or use the full path of the file
         file_path = os.path.join(checkpoint_dir, filename)
         model_paths.append(file_path)
@@ -54,7 +55,7 @@ def best(model_path):
     model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                     seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
     model = model.cuda()
-    model.load_state_dict(torch.load(model_path), strict=False)
+    model.load_state_dict(torch.load(model_path))
 
 
     def test(KSTEPS=20):
@@ -79,7 +80,8 @@ def best(model_path):
             FDEs = temp[:, -1, :].min(dim=0)[0]
             ade_refi_all.extend(ADEs.tolist())
             fde_refi_all.extend(FDEs.tolist())
-
+            #controlpoint_visualizer(V_init.detach(),batch_idx = batch_idx)
+            #trajectory_visualizer(V_refi.detach(), S_obs, S_trgt, batch_idx)
             progressbar.update(1)
 
         progressbar.close()
@@ -99,7 +101,9 @@ def main():
         ade_refi, fde_refi = [], []
         # Repeat the evaluation to reduce randomness
         print(f"Epoch: {model_path}")
-        repeat = 2
+        #if not model_path.endswith('eth0.15_47_best.pth'):
+        #   continue
+        repeat = 10
         for i in range(repeat):
             temp = best(model_path)
             ade_refi.append(temp[0])

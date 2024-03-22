@@ -61,12 +61,12 @@ parser.add_argument('--use_lrschd', action="store_true",
                     default=False, help='Use lr rate scheduler')
 parser.add_argument('--tag', default='tag', help='Personal tag for the model')
 parser.add_argument('--nans', default=0.1, type=float, help='Number of nans prior to training')
-parser.add_argument('--saits-lr', default=1e-4, type=float, help='Learning Rate of pre-trained SAITS model')
+parser.add_argument('--saits_lr', default=1e-4, type=float, help='Learning Rate of pre-trained SAITS model')
 args = parser.parse_args()
 
 plt.figure(figsize=(20,20))
 def plot_grad_flow(named_parameters):
-    '''Plots the gradients flowing through different layers in the net during training.
+    '''Plots the gradients flowing through different layecliprs in the net during training.
     Can be used for checking for possible gradient vanishing / exploding problems.
 
     Usage: Plug this function in Trainer class after loss.backwards() as 
@@ -124,7 +124,7 @@ val_loader = DataLoader(val_dataset, batch_size=1,
 model = graph_tern(n_epgcn=args.n_epgcn, n_epcnn=args.n_epcnn, n_trgcn=args.n_trgcn, n_trcnn=args.n_trcnn,
                    seq_len=args.obs_seq_len, pred_seq_len=args.pred_seq_len, n_ways=args.n_ways, n_smpl=args.n_smpl)
 model = model.to(device)
-saits = create_saits_model(epochs=10)
+saits = create_saits_model(epochs=128)
 all_parameters = list(model.parameters()) + list(saits.model.parameters())
 
 optimizer = torch.optim.SGD(all_parameters, lr=args.lr)
@@ -235,7 +235,7 @@ def train(epoch, nan=0):
             pass
         else:
             loss.backward()
-            # plot_grad_flow(saits.model.named_parameters())
+            # plot_grad_flow(model.named_parameters())
             loss_batch += loss.item()
 
         r_loss_batch += r_loss.item()
@@ -356,7 +356,8 @@ def main():
     else:
         pre_train_saits()
         torch.save(saits.model.state_dict(), saits_pkl)
-    print(args.saits_lr)
+    print("saits_lr",args.saits_lr)
+    print("lr", args.lr)
     saits.optimizer = Adam(lr = args.saits_lr, weight_decay= args.saits_lr/20)
     saits.model.train()
     # init_params = {}

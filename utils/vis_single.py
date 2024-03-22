@@ -7,7 +7,7 @@ np.seterr(divide='ignore', invalid='ignore')
 from matplotlib import transforms
 
 
-def trajectory_visualizer(V_pred, V_obs, V_trgt, V_pred_orig,batch_idx = 0):
+def trajectory_visualizer(V_pred, V_obs, V_trgt,batch_idx = 0):
     r"""Visualize trajectories"""
     # trajectory_visualizer(V_refi.detach(), S_obs, S_trgt)
     import matplotlib.pyplot as plt
@@ -15,55 +15,36 @@ def trajectory_visualizer(V_pred, V_obs, V_trgt, V_pred_orig,batch_idx = 0):
     # generate gt trajectory
     V_gt = torch.cat((V_obs[:, 0], V_trgt[:, 0]), dim=1).squeeze(dim=0)
     V_absl = V_pred
-    V_absl_orig = V_pred_orig
 
     # visualize trajectories
     V_absl_temp = V_absl.view(-1, V_absl.size(2), 2)[:, :, :].cpu().numpy()
-    V_absl_orig_temp = V_absl_orig.view(-1, V_absl_orig.size(2), 2)[:, :, :].cpu().numpy()
-
     V_gt_temp = V_gt[:, :, :].cpu().numpy()
 
     V_pred_traj_gt = V_trgt[:, 0].squeeze(dim=0)
     temp = V_absl - V_pred_traj_gt
-    temp_orig = V_absl_orig - V_pred_traj_gt
     temp = (temp ** 2).sum(dim=-1).sqrt()
-    temp_orig = (temp_orig ** 2).sum(dim=-1).sqrt()
 
     V_absl = V_absl.cpu().numpy()
-    V_absl_orig = V_absl_orig.cpu().numpy()
-
-
     bestADETrajectory = temp.mean(dim=1).min(dim=0)[1].cpu().numpy()
-    bestADETrajectory_orig = temp_orig.mean(dim=1).min(dim=0)[1].cpu().numpy()
-
 
     # Visualize trajectories
     linew = 3
     fig, ax = plt.subplots()
     # fig = plt.figure(figsize=(10, 8))
 
-    background_path = '/home/achintya_n/btp/merge/GraphTERNComplete/images/eth.png'
+    background_path = '/home/achintya_n/btp/merge/GraphTERNComplete/images/hotel.png'
     background_img = mpimg.imread(background_path)
     tr = transforms.Affine2D().rotate_deg(90)
-    # ax.imshow(background_img, transform=tr + ax.transData, extent=[-10, 23, -18, 11])
-    ax.imshow(background_img, extent=[-11,18,-1,15])
+    ax.imshow(background_img, transform=tr + ax.transData, extent=[-11, 15, -11, 15])
 
     for n in range(V_pred.size(2)):
         ax.plot(V_gt_temp[:8, n, 0], V_gt_temp[:8, n, 1], linestyle='-', color='darkorange', linewidth=linew,label = "Observation")
         ax.plot(V_gt_temp[7:, n, 0], V_gt_temp[7:, n, 1], linestyle='-', color='lime', linewidth=linew,label = "Grounf Truth")
 
-
-        bestTrajectory_orig = V_absl_orig[bestADETrajectory_orig[n], :, n]
-        ax.plot([V_gt_temp[7, n, 0], bestTrajectory_orig[0, 0]], [V_gt_temp[7, n, 1], bestTrajectory_orig[0, 1]], linestyle='-',
-                 color='magenta', linewidth=linew, label = "Graphtern")
-        ax.plot(bestTrajectory_orig[:, 0], bestTrajectory_orig[:, 1], linestyle='-', color='magenta', linewidth=linew, label = "Graptern")
-
         bestTrajectory = V_absl[bestADETrajectory[n], :, n]
         ax.plot([V_gt_temp[7, n, 0], bestTrajectory[0, 0]], [V_gt_temp[7, n, 1], bestTrajectory[0, 1]], linestyle='-',
                  color='yellow', linewidth=linew, label = "Our Model")
         ax.plot(bestTrajectory[:, 0], bestTrajectory[:, 1], linestyle='-', color='yellow', linewidth=linew, label = "OurModel")
-
-        
 
     plt.tick_params(axis="y", direction="in", pad=-22)
     plt.tick_params(axis="x", direction="in", pad=-15)
@@ -72,7 +53,7 @@ def trajectory_visualizer(V_pred, V_obs, V_trgt, V_pred_orig,batch_idx = 0):
     plt.tight_layout()
     ax.axis('off')
     #leg = ax.legend();
-    plt.savefig(f"/home/achintya_n/images_2/univ/{batch_idx}.png")
+    plt.savefig(f"/home/achintya_n/images_2/cp3/trajectory/hotel/withbg/{batch_idx}.png")
     plt.close('all')
 
 

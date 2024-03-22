@@ -16,12 +16,15 @@ def generate_incidence_matrix(V, hyper_scales):
     features = v.shape[3]
     device = v.get_device()
     H = []
+    W = []
     for i in range(obs_len):
         current_frame_features = v[:,i,:,:].clone()
-        current_frame_hypergraph_indices = generate_hyper_graph(current_frame_features,hyper_scales)
+        current_frame_hypergraph_indices, current_frame_weights = generate_hyper_graph(current_frame_features,hyper_scales)
         H.append(current_frame_hypergraph_indices.unsqueeze(1))
+        W.append(current_frame_weights.unsqueeze(1))
     H = torch.cat(H, dim = 1)
-    return H
+    W = torch.cat(W, dim = 1)
+    return H,W
 
 
 
@@ -96,7 +99,7 @@ class graph_tern(nn.Module):
         # Generate multi-relational pedestrian graph
         # make adjacency matrix for observed 8 frames
         A_obs = generate_adjacency_matrix(S_obs).detach()
-        H_obs = generate_incidence_matrix(S_obs,self.hyper_scales)
+        H_obs, W_obs = generate_incidence_matrix(S_obs,self.hyper_scales)
 
         # Graph Control Point Prediction
         V_obs_abs = S_obs[:, 0]
@@ -107,7 +110,7 @@ class graph_tern(nn.Module):
         # print(V_init)
         V_actual = V_init.detach().clone()
         for k in range(self.n_epgcn):
-            V_init= self.tp_mrgcns[k](V_init, H_obs, vgg_list)
+            V_init= self.tp_mrgcns[k](V_init, H_obs, vgg_list, W_obs)
 
         # NCTV -> NTCV
         V_init = V_init.permute(0, 2, 1, 3).contiguous()
@@ -237,6 +240,7 @@ class graph_tern(nn.Module):
 
         # Initial trajectory prediction
         # Linear interpolation NVC -> NTVC
+        all_end = endpoint_set
         V_pred = endpoint_set.unsqueeze(dim=1).repeat_interleave(repeats=self.pred_seq_len, dim=1)
         V_pred_abs = (V_pred.cumsum(dim=1) + V_obs_abs.squeeze(dim=0)[-1, :, :]).detach().clone()
 
@@ -248,12 +252,13 @@ class graph_tern(nn.Module):
         # Graph Trajectory Refinement
         # make adjacency matrix for predicted 12 frames (will be iteratively change)
         A_pred = generate_adjacency_matrix(torch.stack([V_pred_abs, V_pred], dim=1))
-        H_pred = generate_incidence_matrix(torch.stack([V_pred_abs, V_pred], dim=1),self.hyper_scales)
+        H_pred, W_pred = generate_incidence_matrix(torch.stack([V_pred_abs, V_pred], dim=1),self.hyper_scales)
 
         # concatenate to make full 20 frame sequences
         V = torch.cat([V_obs_rept, V_pred], dim=1).detach()
         A = torch.cat([A_obs, A_pred], dim=2).detach()
         H = torch.cat([H_obs, H_pred], dim=1)
+        # W = torch.cat([W_obs, W_pred], dim=1)
 
         # NTVC -> NCTV
         V_corr = V.permute(0, 3, 1, 2).contiguous()

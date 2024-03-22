@@ -133,3 +133,5 @@ SAITS/
 *.err
 *.out
 *.sh
+*.pkl
+images/
